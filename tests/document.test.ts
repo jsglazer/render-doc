@@ -38,10 +38,12 @@ describe('export folder', () => {
 		expect(folderNameProblem('a/b')).not.toBeNull();
 		expect(folderNameProblem('Paper 2')).toBeNull();
 	});
-	it('detects collisions and a missing parent; never proposes overwriting', () => {
-		expect(checkExportTarget('/p', 'Paper', exists)).toMatchObject({ ok: false, reason: 'collision' });
+	it('warns, without blocking, when the folder exists; blocks a missing parent', () => {
+		const existingCheck = checkExportTarget('/p', 'Paper', exists);
+		expect(existingCheck).toMatchObject({ ok: true, target: '/p/Paper', exists: true });
+		if (existingCheck.ok && existingCheck.exists) expect(existingCheck.warning).toMatch(/already exists.*overwrite/);
 		expect(checkExportTarget('/missing', 'Paper', exists)).toMatchObject({ ok: false, reason: 'no-parent' });
-		expect(checkExportTarget('/p/', 'Paper 2', exists)).toEqual({ ok: true, target: '/p/Paper 2' });
+		expect(checkExportTarget('/p/', 'Paper 2', exists)).toEqual({ ok: true, target: '/p/Paper 2', exists: false });
 	});
 });
 
@@ -111,7 +113,7 @@ describe('prepareDocument + buildFiles', () => {
 	});
 
 	it('includes biblatex, refs.bib and the bibliography only when the note cites', async () => {
-		const target = { resourcePath: '/v', parentDir: '/out', folderName: 'Paper', stem: 'Paper' };
+		const target = { resourcePath: '/v', parentDir: '/out', folderName: 'Paper', stem: 'Paper', overwrite: false };
 		const cited = buildFiles(await prepareDocument('(Bonica, 2018)', 'P.md', '@', resolver, index), readDocMeta({}, 'P'), target);
 		expect(cited.job).toMatchObject({ bibliography: 'refs.bib', after: 'after.tex', headers: ['meta.tex', 'preamble.tex', 'cite.tex'] });
 		expect(cited.files['after.tex']).toBe('\\printbibliography[title={References}]\n');

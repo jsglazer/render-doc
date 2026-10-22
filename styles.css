@@ -11,8 +11,13 @@
 	word-break: break-all;
 }
 
-.render-doc-modal .render-doc-status.mod-warning {
+.render-doc-modal .render-doc-status.mod-error {
 	color: var(--text-error);
+}
+
+.render-doc-modal .render-doc-status.mod-warning {
+	color: var(--text-warning);
+	font-weight: var(--font-semibold);
 }
 
 .render-doc-modal .render-doc-summary ul {

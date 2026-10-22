@@ -11,8 +11,9 @@
 # Pipeline: table widths -> list breaks -> pandoc to a standalone doc.tex
 # (preamble inlined via -H, images extracted to media/) -> sanitize/optimize
 # media -> table row lines -> latexmk -lualatex (runs biber) -> job.py deliver,
-# which creates <parentDir>/<folderName> with a non-recursive mkdir and copies
-# ONLY <stem>.pdf, <stem>.tex, refs.bib and media/ into it. Every latexmk/biber
+# which creates <parentDir>/<folderName> with a non-recursive mkdir (or, when
+# the job says "overwrite", reuses the existing folder) and copies ONLY
+# <stem>.pdf, <stem>.tex, refs.bib and media/ into it. Every latexmk/biber
 # intermediate stays in the build folder.
 #
 # The LAST line on stdout is always one JSON status object, which is what the

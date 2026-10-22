@@ -62,11 +62,14 @@ export function joinPath(dir: string, name: string): string {
 }
 
 export type TargetCheck =
-	| { ok: true; target: string }
-	| { ok: false; reason: 'invalid' | 'no-parent' | 'collision'; message: string };
+	| { ok: true; target: string; exists: false }
+	| { ok: true; target: string; exists: true; warning: string }
+	| { ok: false; reason: 'invalid' | 'no-parent'; message: string };
 
-// Never overwrite an existing export folder: a collision blocks the export
-// until the user types a new name (builder constraint §4).
+// An existing export folder no longer blocks the export (Josh, 2026-10-21:
+// "allow saving to overwrite existing file, just warn about it"): the dialog
+// shows the warning, and delivery replaces only Render Doc's own files in it.
+// Never silent — a folder that appears after the dialog checked still fails.
 export function checkExportTarget(
 	parentDir: string,
 	folderName: string,
@@ -79,6 +82,13 @@ export function checkExportTarget(
 		return { ok: false, reason: 'no-parent', message: `The parent folder does not exist: ${parentDir}` };
 	}
 	const target = joinPath(parent, folderName.trim());
-	if (exists(target)) return { ok: false, reason: 'collision', message: `${target} already exists. Choose another folder name.` };
-	return { ok: true, target };
+	if (exists(target)) {
+		return {
+			ok: true,
+			target,
+			exists: true,
+			warning: `${target} already exists. Rendering will overwrite its PDF, .tex, refs.bib and media/.`,
+		};
+	}
+	return { ok: true, target, exists: false };
 }

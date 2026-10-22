@@ -45,6 +45,9 @@ export interface RenderPlan {
 	parentDir: string; // absolute; edited by the dialog
 	folderName: string; // edited by the dialog
 	stem: string;
+	// Set when Render is clicked while the dialog shows the "already exists"
+	// warning. Only then may delivery write into an existing folder.
+	overwrite: boolean;
 }
 
 export type RenderOutcome =
@@ -115,6 +118,7 @@ export class RenderExporter {
 			parentDir,
 			folderName: stem,
 			stem,
+			overwrite: false,
 		};
 	}
 
@@ -144,6 +148,9 @@ export class RenderExporter {
 
 		const target = this.check(plan);
 		if (!target.ok) return fail('folder', target.message);
+		if (target.exists && !plan.overwrite) {
+			return fail('folder', `${target.target} appeared after the dialog checked, so nothing was written. Render again to overwrite it.`);
+		}
 
 		// Before anything is compiled: every cited key must come back from Zotero.
 		let bib = '';
@@ -169,6 +176,7 @@ export class RenderExporter {
 			parentDir: plan.parentDir,
 			folderName: plan.folderName.trim(),
 			stem: plan.stem,
+			overwrite: plan.overwrite,
 		});
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');

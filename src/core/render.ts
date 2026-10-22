@@ -3,6 +3,7 @@
 // files into the staging folder (src/export/exporter.ts, and the integration
 // test, which drives the real renderer with exactly these files).
 
+import { separateBlocks } from './blockSeparation';
 import type { CitationResult } from './citations';
 import { replaceCitations } from './citations';
 import type { DocMeta } from './document';
@@ -28,9 +29,11 @@ export async function prepareDocument(
 	resolver: ExportResolver,
 	index: CiteIndex,
 ): Promise<PreparedDocument> {
+	// Extract the prose, convert Obsidian syntax, add the blank lines pandoc
+	// needs before headings/quotes/tables/fences, then resolve citations.
 	const extraction = extractBody(doc, sigilChar);
 	const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
-	const citations = replaceCitations(converted.markdown, index);
+	const citations = replaceCitations(separateBlocks(converted.markdown), index);
 	return {
 		markdown: citations.markdown,
 		citations,
@@ -52,6 +55,7 @@ export interface RenderJob {
 	parentDir: string; // absolute; the export folder is created inside it
 	folderName: string;
 	stem: string; // <stem>.pdf and <stem>.tex in the export folder
+	overwrite: boolean; // the dialog warned that the folder exists and Josh rendered anyway
 }
 
 export interface BuildFiles {
@@ -68,7 +72,7 @@ export const BIB_FILE = 'refs.bib';
 export function buildFiles(
 	prepared: PreparedDocument,
 	meta: DocMeta,
-	target: { resourcePath: string; parentDir: string; folderName: string; stem: string },
+	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
 ): BuildFiles {
 	const cites = prepared.citations.citekeys.length > 0;
 	const files: Record<string, string> = {

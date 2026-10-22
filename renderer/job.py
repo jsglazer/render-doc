@@ -14,12 +14,14 @@ build folder holding job.json plus the files it names (all build-relative):
       "resourcePath": "/abs/note/folder",
       "parentDir": "/abs/parent",    # the export folder is created inside it
       "folderName": "Paper",
-      "stem": "Paper"                # <stem>.pdf and <stem>.tex in the export folder
+      "stem": "Paper",               # <stem>.pdf and <stem>.tex in the export folder
+      "overwrite": false             # write into an existing export folder (the dialog warned)
     }
 
 Subcommands:
     env <job.json>                     shell assignments (JOB_*) for render-pdf.sh
-    deliver <job.json>                 create the export folder, copy the deliverables
+    deliver <job.json>                 create (or, with overwrite, reuse) the export folder
+                                       and copy the deliverables
     latex-errors <doc.log> [doc.blg]   the useful lines of a failed LaTeX/biber run
     status-fail <stage> <message>      prints a failure status JSON line
 """
@@ -100,15 +102,28 @@ def cmd_env(job_path):
         print("%s=%s" % (key, shlex.quote(value)))
 
 
+def replace_file(src, dst):
+    """Copy src over dst atomically: a reader never sees half a PDF."""
+    tmp = dst + ".rd-partial"
+    shutil.copyfile(src, tmp)
+    os.replace(tmp, dst)
+
+
 def cmd_deliver(job_path):
-    """Create <parentDir>/<folderName> and copy ONLY the deliverables into it:
-    <stem>.pdf, <stem>.tex, refs.bib (when cited) and media/. The folder is
-    made with a non-recursive mkdir, so an existing folder — or one created
-    since the dialog checked — fails with EEXIST instead of being overwritten."""
+    """Put ONLY the deliverables in <parentDir>/<folderName>: <stem>.pdf,
+    <stem>.tex, refs.bib (when cited) and media/.
+
+    A new folder is made with a non-recursive mkdir. An existing folder is
+    used only when the job says "overwrite" (the dialog showed the warning and
+    Josh rendered anyway); then Render Doc's own files in it are replaced, a
+    stale refs.bib or media/ from an earlier render is removed, and anything
+    else in the folder is left alone. Without "overwrite", an existing folder
+    fails with stage "collision" and nothing is written."""
     job, build = load_job(job_path)
     parent = job.get("parentDir") or ""
     name = job.get("folderName") or ""
     stem = job.get("stem") or name
+    overwrite = bool(job.get("overwrite"))
     if not parent or not name:
         fail("deliver", "The job names no export folder.")
     pdf = os.path.join(build, "doc.pdf")
@@ -117,23 +132,35 @@ def cmd_deliver(job_path):
     if not os.path.isdir(parent):
         fail("deliver", "The parent folder does not exist: %s" % parent)
     target = os.path.join(parent, name)
+    created = False
     try:
         os.mkdir(target)
+        created = True
     except FileExistsError:
-        fail("collision", "%s already exists, so nothing was written. Render again and choose another folder name." % target)
+        if not overwrite:
+            fail("collision", "%s already exists, so nothing was written. Render again to overwrite it." % target)
+        if not os.path.isdir(target):
+            fail("collision", "%s exists and is not a folder, so nothing was written." % target)
     except OSError as e:
         fail("deliver", "Could not create %s: %s" % (target, e))
     try:
-        shutil.copyfile(pdf, os.path.join(target, stem + ".pdf"))
-        shutil.copyfile(os.path.join(build, "doc.tex"), os.path.join(target, stem + ".tex"))
+        replace_file(pdf, os.path.join(target, stem + ".pdf"))
+        replace_file(os.path.join(build, "doc.tex"), os.path.join(target, stem + ".tex"))
         bib = in_build(build, job.get("bibliography", ""))
+        bib_out = os.path.join(target, os.path.basename(bib) if bib else "refs.bib")
         if bib:
-            shutil.copyfile(bib, os.path.join(target, os.path.basename(bib)))
+            replace_file(bib, bib_out)
+        elif os.path.isfile(bib_out):
+            os.remove(bib_out)
+        media_out = os.path.join(target, "media")
+        if os.path.isdir(media_out):
+            shutil.rmtree(media_out)
         media = os.path.join(build, "media")
         if os.path.isdir(media):
-            shutil.copytree(media, os.path.join(target, "media"))
+            shutil.copytree(media, media_out)
     except OSError as e:
-        shutil.rmtree(target, ignore_errors=True)
+        if created:
+            shutil.rmtree(target, ignore_errors=True)
         fail("deliver", "Could not write into %s: %s" % (target, e))
     status({"ok": True, "output": target, "pdf": os.path.join(target, stem + ".pdf")})
 

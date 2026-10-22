@@ -1,7 +1,8 @@
 // The pre-export dialog (Developer Decision "Pre-export dialog"): parent folder
-// with a native picker, folder name with a live collision check that disables
-// Render while it collides, and a summary — source notes found, citations
-// resolved, citations left highlighted — with every warning. No font size.
+// with a native picker, folder name with a live check — an existing folder is
+// a warning that Render will overwrite it, a bad name or missing parent
+// disables Render — and a summary: source notes found, citations resolved,
+// citations left highlighted, with every warning. No font size.
 
 import type { App } from 'obsidian';
 import { Modal, Setting } from 'obsidian';
@@ -56,7 +57,7 @@ export class RenderModal extends Modal {
 
 		new Setting(contentEl)
 			.setName('Folder name')
-			.setDesc('A new folder holding the PDF, the .tex file, refs.bib and images. An existing folder is never overwritten.')
+			.setDesc('The folder holding the PDF, the .tex file, refs.bib and images. If it already exists, those files in it are overwritten.')
 			.addText((text) =>
 				text.setValue(plan.folderName).onChange((v) => {
 					plan.folderName = v;
@@ -72,7 +73,9 @@ export class RenderModal extends Modal {
 				b.setButtonText('Render')
 					.setCta()
 					.onClick(() => {
-						if (!this.hooks.check(plan).ok) return;
+						const check = this.hooks.check(plan);
+						if (!check.ok) return;
+						plan.overwrite = check.exists;
 						this.close();
 						this.hooks.onSubmit(plan);
 					});
@@ -92,8 +95,9 @@ export class RenderModal extends Modal {
 		this.renderButton?.setDisabled(!check.ok);
 		if (!this.statusEl) return;
 		this.statusEl.empty();
-		this.statusEl.toggleClass('mod-warning', !check.ok);
-		this.statusEl.setText(check.ok ? `Will create ${check.target}` : check.message);
+		this.statusEl.toggleClass('mod-error', !check.ok);
+		this.statusEl.toggleClass('mod-warning', check.ok && check.exists);
+		this.statusEl.setText(!check.ok ? check.message : check.exists ? check.warning : `Will create ${check.target}`);
 	}
 
 	private renderSummary(el: HTMLElement): void {

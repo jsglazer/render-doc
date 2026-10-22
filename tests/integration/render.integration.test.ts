@@ -58,6 +58,8 @@ const NOTE = [
 	'Campaign money predicts roll-call ideology (Bonica, 2018: 123), and state legislatures polarize (Shor and McCarty, 2011).',
 	'',
 	'An uncited claim (Jones, 2015) stays highlighted, as does prose about code like `(Bonica, 2018)`.',
+	'### State-level data',
+	'A heading typed right under a text line, as Obsidian allows.',
 	'',
 	'![[fig.png|40]]',
 ].join('\n');
@@ -114,6 +116,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 			parentDir,
 			folderName: 'Paper',
 			stem: 'Paper',
+			overwrite: false,
 		});
 		for (const [name, content] of Object.entries(files)) writeFileSync(join(buildDir, name), content, 'utf8');
 		await stageByStream(PREAMBLE, join(buildDir, 'preamble.tex'));
@@ -158,6 +161,8 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(text).toContain('American Journal of Political Science 62(4): 830–848.');
 		expect(text).toContain('Shor, Boris, and Nolan McCarty. 2011.');
 		expect(text).not.toContain('Outline entry');
+		expect(text).not.toContain('###');
+		expect(text).toMatch(/highlighted, as does prose about code like \(Bonica, 2018\)\. \S*\s*State-level data A heading/);
 		expect(text).not.toMatch(/p\. ?123/);
 	});
 
@@ -171,7 +176,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(tex).not.toContain(buildDir);
 	});
 
-	it('never overwrites an existing export folder', () => {
+	it('refuses an existing export folder unless the job says overwrite', () => {
 		const python = SEARCH_PATH.map((d) => join(d, 'python3')).find((p) => existsSync(p)) ?? 'python3';
 		let out = '';
 		try {
@@ -191,4 +196,22 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		execFileSync('latexmk', ['-lualatex', '-interaction=nonstopmode', '-halt-on-error', '-r', 'rc', 'Paper.tex'], { cwd: copy, env, stdio: 'ignore', timeout: 240_000 });
 		expect(pdfText(join(copy, 'Paper.pdf')).replace(/\s+/g, ' ')).toContain('(Bonica, 2018: 123)');
 	}, 300_000);
+
+	it('overwrites only its own files when the job says overwrite', () => {
+		const folder = join(parentDir, 'Paper');
+		writeFileSync(join(folder, 'notes.txt'), 'mine', 'utf8');
+		mkdirSync(join(folder, 'media', 'old'), { recursive: true });
+		writeFileSync(join(folder, 'media', 'old', 'stale.png'), 'x', 'utf8');
+		writeFileSync(join(folder, 'Paper.pdf'), 'old pdf', 'utf8');
+		const jobPath = join(buildDir, 'job.json');
+		const job = JSON.parse(readFileSync(jobPath, 'utf8')) as Record<string, unknown>;
+		writeFileSync(jobPath, JSON.stringify({ ...job, overwrite: true }), 'utf8');
+
+		const python = SEARCH_PATH.map((d) => join(d, 'python3')).find((p) => existsSync(p)) ?? 'python3';
+		const out = execFileSync(python, [join(ROOT, 'renderer', 'job.py'), 'deliver', jobPath], { encoding: 'utf8' });
+		expect(JSON.parse(out.trim().split('\n').pop() ?? '{}')).toMatchObject({ ok: true, output: folder });
+		expect(listTree(folder)).toEqual(['Paper.pdf', 'Paper.tex', 'media/', 'media/assets/', 'media/assets/1-fig.png', 'notes.txt', 'refs.bib']);
+		expect(readFileSync(join(folder, 'notes.txt'), 'utf8')).toBe('mine');
+		expect(pdfText(join(folder, 'Paper.pdf'))).toContain('(Bonica, 2018: 123)');
+	});
 });

@@ -11,8 +11,8 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 - **APSA-style bibliography.** References are typeset with biblatex and biber (`ext-authoryear`, configured toward APSA) and list only the works the paper cites: `Bonica, Adam. 2018. “Title.” Journal 62(4): 830–848.`
 - **Unmatched citations stay visible.** A parenthetical that looks like a citation but matches no source note, matches two different citekeys, or cites several works at once is left in the text with a yellow highlight, and listed as a warning in the dialog.
 - **Your preamble.** The preamble is read fresh from `~/Library/CloudStorage/Dropbox/SysAdmin/config/Files/LatexPre.tex` on every render, so your edits apply right away. The title (frontmatter `title:`, or else the note name) goes in both a title block on page 1 and the running header.
-- **Obsidian syntax handled.** Wikilinks become plain text, embedded notes and sections are inlined, images are copied in, `%%comments%%` are dropped, and Virtual Outliner outline lines (`@`, `@@ …`) are stripped.
-- **Never overwrites.** If the export folder already exists, the dialog says so and disables **Render** until you pick another name.
+- **Obsidian syntax handled.** Headings, quotes, tables and code blocks typed directly under a line of text still render as headings, quotes, tables and code, though pandoc would otherwise merge them into the paragraph above. Wikilinks become plain text, embedded notes and sections are inlined, images are copied in, `%%comments%%` are dropped, and Virtual Outliner outline lines (`@`, `@@ …`) are stripped.
+- **Overwrites only with a warning.** If the export folder already exists, the dialog warns that rendering will overwrite it. Rendering anyway replaces the PDF, `.tex`, `refs.bib` and `media/` in that folder and leaves any other files there alone.
 - **Shows the result.** When rendering finishes, the new folder opens in Finder.
 
 ## Requirements
@@ -24,7 +24,7 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 ## Usage
 
 1. Open a note and run **Render Doc: Render current note** from the command palette.
-2. In the dialog, check the **Parent folder** (it defaults to the last one you used, or `~/Library/CloudStorage/Dropbox/_Schar/Classes`; **Choose…** opens a folder picker) and the **Folder name** (it defaults to the note's name).
+2. In the dialog, check the **Parent folder** (it defaults to the last one you used, or `~/Library/CloudStorage/Dropbox/_Schar/Classes`; **Choose…** opens a folder picker) and the **Folder name** (it defaults to the note's name). If that folder already exists, a warning says rendering will overwrite it.
 3. Read the summary: how many source notes were found, how many citations resolved, and any left unmatched, with the reason for each.
 4. Click **Render**.
 
