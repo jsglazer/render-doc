@@ -67,14 +67,16 @@ function revealInFinder(path) {
 
 // src/core/settings.ts
 var DEFAULT_SETTINGS = {
-  lastParentDir: ""
+  lastParentDir: "",
+  lineNumbers: false
 };
 var DEFAULT_PARENT_DIR_HOME = "Library/CloudStorage/Dropbox/_Schar/Classes";
 var PREAMBLE_PATH_HOME = "Library/CloudStorage/Dropbox/SysAdmin/config/Files/LatexPre.tex";
 function mergeSettings(saved) {
   const s = saved !== null && typeof saved === "object" ? saved : {};
   return {
-    lastParentDir: typeof s.lastParentDir === "string" ? s.lastParentDir : DEFAULT_SETTINGS.lastParentDir
+    lastParentDir: typeof s.lastParentDir === "string" ? s.lastParentDir : DEFAULT_SETTINGS.lastParentDir,
+    lineNumbers: typeof s.lineNumbers === "boolean" ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers
   };
 }
 function initialParentDir(settings, home) {
@@ -323,9 +325,11 @@ var BIBLATEX = [
   "\\DeclareFieldFormat{pages}{#1}",
   "\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}"
 ];
-function citeHeader(withBibliography) {
+var LINE_NUMBERS = ["\\usepackage[pagewise]{lineno}", "\\linenumbers"];
+function citeHeader(withBibliography, lineNumbers = false) {
   const lines = ["% Written by Render Doc \u2014 included AFTER LatexPre.tex.", ...UNMATCHED_MACRO];
   if (withBibliography) lines.push(...BIBLATEX);
+  if (lineNumbers) lines.push(...LINE_NUMBERS);
   return `${lines.join("\n")}
 `;
 }
@@ -781,13 +785,14 @@ async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
 }
 var PREAMBLE_FILE = "preamble.tex";
 var BIB_FILE = "refs.bib";
-function buildFiles(prepared, meta, target) {
+function buildFiles(prepared, meta, target, options = {}) {
+  var _a;
   const cites = prepared.citations.citekeys.length > 0;
   const files = {
     "source.md": `${prepared.markdown}
 `,
     "meta.tex": metaHeader(meta.title),
-    "cite.tex": citeHeader(cites),
+    "cite.tex": citeHeader(cites, (_a = options.lineNumbers) != null ? _a : false),
     "meta.json": `${JSON.stringify(pandocMetadata(meta), null, 2)}
 `
   };
@@ -1303,7 +1308,7 @@ var RenderExporter = class {
     this.app = app;
     this.pluginVersion = pluginVersion;
   }
-  async plan(file, parentDir) {
+  async plan(file, parentDir, lineNumbers) {
     var _a, _b, _c;
     const { app } = this;
     const base = vaultBasePath(app);
@@ -1350,7 +1355,8 @@ var RenderExporter = class {
       parentDir,
       folderName: stem,
       stem,
-      overwrite: false
+      overwrite: false,
+      lineNumbers
     };
   }
   check(plan) {
@@ -1396,13 +1402,18 @@ var RenderExporter = class {
     for (const [vaultPath, rel] of plan.stagedImages) {
       await fs.promises.copyFile(path.join(base, vaultPath), path.join(buildDir, rel));
     }
-    const { files, job } = buildFiles(plan.prepared, plan.meta, {
-      resourcePath: plan.noteDir,
-      parentDir: plan.parentDir,
-      folderName: plan.folderName.trim(),
-      stem: plan.stem,
-      overwrite: plan.overwrite
-    });
+    const { files, job } = buildFiles(
+      plan.prepared,
+      plan.meta,
+      {
+        resourcePath: plan.noteDir,
+        parentDir: plan.parentDir,
+        folderName: plan.folderName.trim(),
+        stem: plan.stem,
+        overwrite: plan.overwrite
+      },
+      { lineNumbers: plan.lineNumbers }
+    );
     for (const [name, content] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(buildDir, name), content, "utf8");
     }
@@ -1465,6 +1476,11 @@ var RenderModal = class extends import_obsidian2.Modal {
       })
     );
     this.statusEl = contentEl.createDiv({ cls: "render-doc-status" });
+    new import_obsidian2.Setting(contentEl).setName("Line numbers").setDesc("Number every line of text in the left margin, restarting on each page.").addToggle(
+      (t) => t.setValue(plan.lineNumbers).onChange((v) => {
+        plan.lineNumbers = v;
+      })
+    );
     this.renderSummary(contentEl.createDiv({ cls: "render-doc-summary" }));
     new import_obsidian2.Setting(contentEl).addButton((b) => {
       b.setButtonText("Render").setCta().onClick(() => {
@@ -1549,7 +1565,7 @@ var RenderDocPlugin = class extends import_obsidian3.Plugin {
       return;
     }
     const parentDir = initialParentDir(this.settings, node().os.homedir());
-    const plan = await this.exporter.plan(file, parentDir);
+    const plan = await this.exporter.plan(file, parentDir, this.settings.lineNumbers);
     if (typeof plan === "string") {
       new import_obsidian3.Notice(plan);
       return;
@@ -1571,6 +1587,7 @@ var RenderDocPlugin = class extends import_obsidian3.Plugin {
     var _a;
     this.busy = true;
     this.settings.lastParentDir = plan.parentDir;
+    this.settings.lineNumbers = plan.lineNumbers;
     await this.saveData(this.settings);
     const progress = new import_obsidian3.Notice("Render Doc: starting\u2026", 0);
     try {

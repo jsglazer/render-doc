@@ -49,7 +49,7 @@ export default class RenderDocPlugin extends Plugin {
 			return;
 		}
 		const parentDir = initialParentDir(this.settings, node().os.homedir());
-		const plan = await this.exporter.plan(file, parentDir);
+		const plan = await this.exporter.plan(file, parentDir, this.settings.lineNumbers);
 		if (typeof plan === 'string') {
 			new Notice(plan);
 			return;
@@ -71,6 +71,7 @@ export default class RenderDocPlugin extends Plugin {
 	private async render(plan: RenderPlan): Promise<void> {
 		this.busy = true;
 		this.settings.lastParentDir = plan.parentDir;
+		this.settings.lineNumbers = plan.lineNumbers;
 		await this.saveData(this.settings);
 		const progress = new Notice('Render Doc: starting…', 0);
 		try {

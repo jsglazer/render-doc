@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { readDocMeta } from '../../src/core/document';
+import { citeHeader } from '../../src/core/latex';
 import type { ExportResolver } from '../../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../../src/core/render';
 import { PREAMBLE_PATH_HOME } from '../../src/core/settings';
@@ -195,6 +196,20 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		writeFileSync(join(copy, 'rc'), `$biber = q{"${biber}" %O %S};\n`);
 		execFileSync('latexmk', ['-lualatex', '-interaction=nonstopmode', '-halt-on-error', '-r', 'rc', 'Paper.tex'], { cwd: copy, env, stdio: 'ignore', timeout: 240_000 });
 		expect(pdfText(join(copy, 'Paper.pdf')).replace(/\s+/g, ' ')).toContain('(Bonica, 2018: 123)');
+	}, 300_000);
+
+	it('numbers the lines when cite.tex asks for it', () => {
+		const numbered = join(tmp, 'numbered');
+		cpSync(join(parentDir, 'Paper'), numbered, { recursive: true });
+		const lineno = citeHeader(false, true).trim().split('\n').slice(-2).join('\n');
+		const tex = readFileSync(join(numbered, 'Paper.tex'), 'utf8').replace('\\begin{document}', `${lineno}\n\\begin{document}`);
+		writeFileSync(join(numbered, 'Paper.tex'), tex, 'utf8');
+		const env = { ...process.env, PATH: ENV_PATH };
+		const biber = execFileSync('/bin/zsh', ['-c', `LOG=/dev/null; source ${JSON.stringify(join(ROOT, 'renderer', 'lib.sh'))}; resolve_biber`], { encoding: 'utf8', env }).trim();
+		writeFileSync(join(numbered, 'rc'), `$biber = q{"${biber}" %O %S};\n`);
+		execFileSync('latexmk', ['-lualatex', '-interaction=nonstopmode', '-halt-on-error', '-r', 'rc', 'Paper.tex'], { cwd: numbered, env, stdio: 'ignore', timeout: 240_000 });
+		expect(pdfText(join(numbered, 'Paper.pdf'))).toMatch(/^\s*1\s+\S/m);
+		expect(pdfText(join(parentDir, 'Paper', 'Paper.pdf'))).not.toMatch(/^\s*1\s+\S/m);
 	}, 300_000);
 
 	it('overwrites only its own files when the job says overwrite', () => {

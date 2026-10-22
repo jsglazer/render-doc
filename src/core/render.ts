@@ -73,12 +73,13 @@ export function buildFiles(
 	prepared: PreparedDocument,
 	meta: DocMeta,
 	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
+	options: { lineNumbers?: boolean } = {},
 ): BuildFiles {
 	const cites = prepared.citations.citekeys.length > 0;
 	const files: Record<string, string> = {
 		'source.md': `${prepared.markdown}\n`,
 		'meta.tex': metaHeader(meta.title),
-		'cite.tex': citeHeader(cites),
+		'cite.tex': citeHeader(cites, options.lineNumbers ?? false),
 		'meta.json': `${JSON.stringify(pandocMetadata(meta), null, 2)}\n`,
 	};
 	if (cites) files['after.tex'] = BIBLIOGRAPHY_TRAILER;

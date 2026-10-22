@@ -52,6 +52,8 @@ describe('settings', () => {
 		const s = mergeSettings(undefined);
 		expect(initialParentDir(s, '/Users/x')).toBe('/Users/x/Library/CloudStorage/Dropbox/_Schar/Classes');
 		expect(initialParentDir(mergeSettings({ lastParentDir: '/tmp/out' }), '/Users/x')).toBe('/tmp/out');
+		expect(s.lineNumbers).toBe(false);
+		expect(mergeSettings({ lineNumbers: true }).lineNumbers).toBe(true);
 	});
 });
 
@@ -75,6 +77,10 @@ describe('latex', () => {
 		expect(withBib).toContain('\\DeclareDelimFormat{nameyeardelim}{\\addcomma\\space}');
 		expect(withBib).toContain('\\DeclareDelimFormat{postnotedelim}{\\addcolon\\space}');
 		expect(withBib).toContain('\\DeclareFieldFormat{postnote}{#1}');
+	});
+	it('loads lineno only when line numbers are asked for', () => {
+		expect(citeHeader(true)).not.toContain('lineno');
+		expect(citeHeader(false, true)).toContain('\\usepackage[pagewise]{lineno}\n\\linenumbers');
 	});
 	it('sets \\DocTitle escaped', () => {
 		expect(metaHeader('A_B')).toContain('\\def\\DocTitle{A\\_B}');

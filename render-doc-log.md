@@ -1,7 +1,7 @@
 ---
 Project: render-doc
 Created: 2026-10-21 20:37
-Closed: 2026-10-21 20:52
+Closed: 2026-10-21 23:41
 ---
 # Claude output
 
@@ -50,3 +50,24 @@ Both fixes are in Render Doc 1.0.1, which is pushed and deployed to VaultSchar. 
 **One more thing on page 6, which needs fixing in Zotero:** `(Poole, Keith T and Rosenthal, Howard, 1997)` comes from the Zotero item for the 1997 *Congress* book. Its two authors are stored as single-field names, so they print in full. In Zotero, switch each creator to the two-field (last, first) layout and the citation will read `(Poole and Rosenthal, 1997)`.
 
 Re-render Lit Rev Clean to check it. All 83 tests pass. Obsidian's plugin list will show version 1.0.0 until the next vault reload, but the code that's running is 1.0.1.
+
+## 2026-10-21 23:41 — 1.0.2: line numbers option
+
+**User prompt:** "add an option to print line numbers.  do it and deploy immeditely to VaultSchar"
+
+**Changes:**
+- `src/ui/renderModal.ts`: a **Line numbers** toggle under the folder fields ("Number every line of text in the left margin, restarting on each page.").
+- `src/core/settings.ts`: `lineNumbers` (default off) is remembered between renders; `src/main.ts` passes it to `plan()` and saves it when Render is clicked.
+- `src/core/latex.ts`: `citeHeader(withBibliography, lineNumbers)` appends `\usepackage[pagewise]{lineno}` and `\linenumbers` to `cite.tex` (after LatexPre.tex) only when the toggle is on. `src/core/render.ts` `buildFiles` takes `{ lineNumbers }`; `src/export/exporter.ts` carries it on `RenderPlan`. The delivered `.tex` keeps the line numbers when recompiled.
+- Tests: unit tests for the lineno header and the setting; an integration test compiles the delivered `.tex` with the lineno lines using real lualatex and checks that `pdftotext` shows a line `1`, and that the default render has none.
+- README: the option and the usage step. Version 1.0.2 in `manifest.json`, `package.json`, `versions.json` and the Dev file.
+
+**Verification:** `tsc` clean, `eslint src` clean, `vitest run` 7 files and 85/85 passed. Deployed to VaultSchar (`DEPLOY.sh --dest 2 -y`) and reloaded with `plugin:disable`/`plugin:enable`. A live `eval` showed `exporter.plan` taking 3 arguments and settings `{"lastParentDir":"/Users/josh/Dev/TEMP","lineNumbers":false}`, so the new code is loaded. Plugin info still reports a cached version (1.0.1) until the vault reloads.
+
+| # | Issue | Fix |
+| --- | --- | --- |
+| 1 | No way to print line numbers | **Line numbers** toggle in the dialog, remembered between renders; it adds `lineno` (pagewise) after LatexPre.tex |
+
+**Session summary (as presented to Josh):**
+
+Render Doc 1.0.2 adds a **Line numbers** switch to the render dialog, and it's deployed to VaultSchar. I reloaded the plugin and confirmed the new code is running. When the switch is on, every line of text is numbered in the left margin, starting again at 1 on each page. The plugin remembers the setting for the next render, and the `.tex` file in the export folder keeps the line numbers if you recompile it. It's off by default. All 85 tests pass, including a real LaTeX compile that checks the numbers appear in the PDF. The change is committed and pushed. Obsidian's plugin list will show the old version number until the next vault reload.

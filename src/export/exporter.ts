@@ -48,6 +48,7 @@ export interface RenderPlan {
 	// Set when Render is clicked while the dialog shows the "already exists"
 	// warning. Only then may delivery write into an existing folder.
 	overwrite: boolean;
+	lineNumbers: boolean; // edited by the dialog
 }
 
 export type RenderOutcome =
@@ -70,7 +71,7 @@ export class RenderExporter {
 		private pluginVersion: string,
 	) {}
 
-	async plan(file: TFile, parentDir: string): Promise<RenderPlan | string> {
+	async plan(file: TFile, parentDir: string, lineNumbers: boolean): Promise<RenderPlan | string> {
 		const { app } = this;
 		const base = vaultBasePath(app);
 		if (base === null) return 'Render Doc needs a vault stored on this computer.';
@@ -119,6 +120,7 @@ export class RenderExporter {
 			folderName: stem,
 			stem,
 			overwrite: false,
+			lineNumbers,
 		};
 	}
 
@@ -171,13 +173,18 @@ export class RenderExporter {
 		for (const [vaultPath, rel] of plan.stagedImages) {
 			await fs.promises.copyFile(path.join(base, vaultPath), path.join(buildDir, rel));
 		}
-		const { files, job } = buildFiles(plan.prepared, plan.meta, {
-			resourcePath: plan.noteDir,
-			parentDir: plan.parentDir,
-			folderName: plan.folderName.trim(),
-			stem: plan.stem,
-			overwrite: plan.overwrite,
-		});
+		const { files, job } = buildFiles(
+			plan.prepared,
+			plan.meta,
+			{
+				resourcePath: plan.noteDir,
+				parentDir: plan.parentDir,
+				folderName: plan.folderName.trim(),
+				stem: plan.stem,
+				overwrite: plan.overwrite,
+			},
+			{ lineNumbers: plan.lineNumbers },
+		);
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');
 		}

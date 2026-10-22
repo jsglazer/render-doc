@@ -2,7 +2,8 @@
 // with a native picker, folder name with a live check — an existing folder is
 // a warning that Render will overwrite it, a bad name or missing parent
 // disables Render — and a summary: source notes found, citations resolved,
-// citations left highlighted, with every warning. No font size.
+// citations left highlighted, with every warning. A line-numbers toggle,
+// remembered between renders. No font size.
 
 import type { App } from 'obsidian';
 import { Modal, Setting } from 'obsidian';
@@ -65,6 +66,15 @@ export class RenderModal extends Modal {
 				}),
 			);
 		this.statusEl = contentEl.createDiv({ cls: 'render-doc-status' });
+
+		new Setting(contentEl)
+			.setName('Line numbers')
+			.setDesc('Number every line of text in the left margin, restarting on each page.')
+			.addToggle((t) =>
+				t.setValue(plan.lineNumbers).onChange((v) => {
+					plan.lineNumbers = v;
+				}),
+			);
 
 		this.renderSummary(contentEl.createDiv({ cls: 'render-doc-summary' }));
 

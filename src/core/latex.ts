@@ -6,7 +6,8 @@
 //   -H meta.tex       \DocTitle, BEFORE LatexPre.tex so its \providecommand
 //                     default leaves the title alone
 //   -H preamble.tex   LatexPre.tex, staged by stream copy
-//   -H cite.tex       \rdunmatched always; biblatex only when the note cites
+//   -H cite.tex       \rdunmatched always; biblatex only when the note cites;
+//                     lineno only when the dialog asked for line numbers
 //   -A after.tex      \printbibliography, only when the note cites
 //
 // No pandoc --biblatex or --citeproc: the body already carries raw \autocite
@@ -93,9 +94,13 @@ const BIBLATEX = [
 	'\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}',
 ];
 
-export function citeHeader(withBibliography: boolean): string {
+// Every line of body text numbered in the left margin, restarting on each page.
+const LINE_NUMBERS = ['\\usepackage[pagewise]{lineno}', '\\linenumbers'];
+
+export function citeHeader(withBibliography: boolean, lineNumbers = false): string {
 	const lines = ['% Written by Render Doc — included AFTER LatexPre.tex.', ...UNMATCHED_MACRO];
 	if (withBibliography) lines.push(...BIBLATEX);
+	if (lineNumbers) lines.push(...LINE_NUMBERS);
 	return `${lines.join('\n')}\n`;
 }
 
