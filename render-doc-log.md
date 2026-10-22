@@ -1,7 +1,7 @@
 ---
 Project: render-doc
 Created: 2026-10-21 20:37
-Closed: 2026-10-21 23:41
+Closed: 2026-10-21 23:52
 ---
 # Claude output
 
@@ -71,3 +71,23 @@ Re-render Lit Rev Clean to check it. All 83 tests pass. Obsidian's plugin list w
 **Session summary (as presented to Josh):**
 
 Render Doc 1.0.2 adds a **Line numbers** switch to the render dialog, and it's deployed to VaultSchar. I reloaded the plugin and confirmed the new code is running. When the switch is on, every line of text is numbered in the left margin, starting again at 1 on each page. The plugin remembers the setting for the next render, and the `.tex` file in the export folder keeps the line numbers if you recompile it. It's off by default. All 85 tests pass, including a real LaTeX compile that checks the numbers appear in the PDF. The change is committed and pushed. Obsidian's plugin list will show the old version number until the next vault reload.
+
+## 2026-10-21 23:52 — 1.0.3: line numbers count through the whole document
+
+**User prompt:** "output TOTAL line number, not per page"
+
+**Changes:**
+- `src/core/latex.ts`: `\usepackage[pagewise]{lineno}` becomes `\usepackage{lineno}`, so numbering runs continuously from the first line to the last instead of restarting on each page.
+- `src/ui/renderModal.ts` and `README.md`: the toggle description now says "counting through the whole document".
+- Tests: the unit test expects plain `lineno`; the integration test also checks that line `1` appears only once in the PDF.
+- Version 1.0.3 in `manifest.json`, `package.json`, `versions.json` and the Dev file.
+
+**Verification:** `tsc` clean, `eslint src` clean, `vitest run` 85/85 passed. A separate 3-page lualatex check confirmed page 2 starts at line 47. Deployed to VaultSchar and reloaded via `plugin:disable`/`plugin:enable`; the deployed `main.js` contains `\usepackage{lineno}` and no `pagewise`.
+
+| # | Issue | Fix |
+| --- | --- | --- |
+| 1 | Line numbers restarted at 1 on each page | Dropped lineno's `pagewise` option; numbering is now continuous through the document |
+
+**Session summary (as presented to Josh):**
+
+Line numbers now run through the whole document instead of restarting at 1 on each page. This is in Render Doc 1.0.3, which is deployed and reloaded in VaultSchar, committed and pushed. I checked it with a three-page test PDF, where page 2 starts at line 47. All 85 tests pass.

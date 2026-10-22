@@ -69,7 +69,7 @@ export class RenderModal extends Modal {
 
 		new Setting(contentEl)
 			.setName('Line numbers')
-			.setDesc('Number every line of text in the left margin, restarting on each page.')
+			.setDesc('Number every line of text in the left margin, counting through the whole document.')
 			.addToggle((t) =>
 				t.setValue(plan.lineNumbers).onChange((v) => {
 					plan.lineNumbers = v;

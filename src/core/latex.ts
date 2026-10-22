@@ -94,8 +94,8 @@ const BIBLATEX = [
 	'\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}',
 ];
 
-// Every line of body text numbered in the left margin, restarting on each page.
-const LINE_NUMBERS = ['\\usepackage[pagewise]{lineno}', '\\linenumbers'];
+// Every line of body text numbered in the left margin, counting through the whole document.
+const LINE_NUMBERS = ['\\usepackage{lineno}', '\\linenumbers'];
 
 export function citeHeader(withBibliography: boolean, lineNumbers = false): string {
 	const lines = ['% Written by Render Doc — included AFTER LatexPre.tex.', ...UNMATCHED_MACRO];

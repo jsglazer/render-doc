@@ -80,7 +80,7 @@ describe('latex', () => {
 	});
 	it('loads lineno only when line numbers are asked for', () => {
 		expect(citeHeader(true)).not.toContain('lineno');
-		expect(citeHeader(false, true)).toContain('\\usepackage[pagewise]{lineno}\n\\linenumbers');
+		expect(citeHeader(false, true)).toContain('\\usepackage{lineno}\n\\linenumbers');
 	});
 	it('sets \\DocTitle escaped', () => {
 		expect(metaHeader('A_B')).toContain('\\def\\DocTitle{A\\_B}');

@@ -325,7 +325,7 @@ var BIBLATEX = [
   "\\DeclareFieldFormat{pages}{#1}",
   "\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}"
 ];
-var LINE_NUMBERS = ["\\usepackage[pagewise]{lineno}", "\\linenumbers"];
+var LINE_NUMBERS = ["\\usepackage{lineno}", "\\linenumbers"];
 function citeHeader(withBibliography, lineNumbers = false) {
   const lines = ["% Written by Render Doc \u2014 included AFTER LatexPre.tex.", ...UNMATCHED_MACRO];
   if (withBibliography) lines.push(...BIBLATEX);
@@ -1476,7 +1476,7 @@ var RenderModal = class extends import_obsidian2.Modal {
       })
     );
     this.statusEl = contentEl.createDiv({ cls: "render-doc-status" });
-    new import_obsidian2.Setting(contentEl).setName("Line numbers").setDesc("Number every line of text in the left margin, restarting on each page.").addToggle(
+    new import_obsidian2.Setting(contentEl).setName("Line numbers").setDesc("Number every line of text in the left margin, counting through the whole document.").addToggle(
       (t) => t.setValue(plan.lineNumbers).onChange((v) => {
         plan.lineNumbers = v;
       })

@@ -12,7 +12,7 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 - **Unmatched citations stay visible.** A parenthetical that looks like a citation but matches no source note, matches two different citekeys, or cites several works at once is left in the text with a yellow highlight, and listed as a warning in the dialog.
 - **Your preamble.** The preamble is read fresh from `~/Library/CloudStorage/Dropbox/SysAdmin/config/Files/LatexPre.tex` on every render, so your edits apply right away. The title (frontmatter `title:`, or else the note name) goes in both a title block on page 1 and the running header.
 - **Obsidian syntax handled.** Headings, quotes, tables and code blocks typed directly under a line of text still render as headings, quotes, tables and code, though pandoc would otherwise merge them into the paragraph above. Wikilinks become plain text, embedded notes and sections are inlined, images are copied in, `%%comments%%` are dropped, and Virtual Outliner outline lines (`@`, `@@ …`) are stripped.
-- **Optional line numbers.** A **Line numbers** switch in the dialog numbers every line of text in the left margin, restarting on each page. The choice is remembered for the next render.
+- **Optional line numbers.** A **Line numbers** switch in the dialog numbers every line of text in the left margin, counting through the whole document. The choice is remembered for the next render.
 - **Overwrites only with a warning.** If the export folder already exists, the dialog warns that rendering will overwrite it. Rendering anyway replaces the PDF, `.tex`, `refs.bib` and `media/` in that folder and leaves any other files there alone.
 - **Shows the result.** When rendering finishes, the new folder opens in Finder.
 

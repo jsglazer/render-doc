@@ -208,7 +208,10 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		const biber = execFileSync('/bin/zsh', ['-c', `LOG=/dev/null; source ${JSON.stringify(join(ROOT, 'renderer', 'lib.sh'))}; resolve_biber`], { encoding: 'utf8', env }).trim();
 		writeFileSync(join(numbered, 'rc'), `$biber = q{"${biber}" %O %S};\n`);
 		execFileSync('latexmk', ['-lualatex', '-interaction=nonstopmode', '-halt-on-error', '-r', 'rc', 'Paper.tex'], { cwd: numbered, env, stdio: 'ignore', timeout: 240_000 });
-		expect(pdfText(join(numbered, 'Paper.pdf'))).toMatch(/^\s*1\s+\S/m);
+		const text = pdfText(join(numbered, 'Paper.pdf'));
+		expect(text).toMatch(/^\s*1\s+\S/m);
+		// One running count through the whole document: line 1 appears once, never again on a later page.
+		expect(text.match(/^\s*1\s+\S/gm)).toHaveLength(1);
 		expect(pdfText(join(parentDir, 'Paper', 'Paper.pdf'))).not.toMatch(/^\s*1\s+\S/m);
 	}, 300_000);
 
