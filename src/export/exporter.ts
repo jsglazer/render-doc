@@ -20,7 +20,7 @@ import { FileSystemAdapter } from 'obsidian';
 
 import { zoteroManagerApi } from '../adapter/obsidianInternals';
 import type { DocMeta, TargetCheck } from '../core/document';
-import { checkExportTarget, readDocMeta, safeStem } from '../core/document';
+import { checkExportTarget, folderNameFor, readDocMeta, safeStem } from '../core/document';
 import { DEFAULT_SIGIL_CHAR } from '../core/exportBody';
 import type { ExportResolver } from '../core/obsidianMarkdown';
 import type { PreparedDocument } from '../core/render';
@@ -122,7 +122,7 @@ export class RenderExporter {
 			stagedImages,
 			noteDir: path.join(base, file.parent?.path ?? ''),
 			parentDir: options.parentDir,
-			folderName: stem,
+			folderName: folderNameFor(stem, options.mode),
 			stem,
 			overwrite: false,
 			lineNumbers: options.lineNumbers,

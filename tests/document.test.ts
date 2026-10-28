@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkExportTarget, folderNameProblem, formatCoverDate, pandocMetadata, readDocMeta, safeStem } from '../src/core/document';
+import { checkExportTarget, folderNameFor, folderNameProblem, formatCoverDate, pandocMetadata, readDocMeta, safeStem } from '../src/core/document';
 import { extractBody } from '../src/core/exportBody';
 import { autociteCommand, citeHeader, latexEscape, metaHeader, unmatchedCommand } from '../src/core/latex';
 import type { ExportResolver } from '../src/core/obsidianMarkdown';
@@ -54,6 +54,12 @@ describe('export folder', () => {
 	it('makes a safe stem from the note name', () => {
 		expect(safeStem('A/B: C.')).toBe('A-B- C');
 		expect(safeStem('...')).toBe('Document');
+	});
+	it('suffixes the folder name with the version, swapping an existing suffix', () => {
+		expect(folderNameFor('TheoryHypo', 'dev')).toBe('TheoryHypo Dev');
+		expect(folderNameFor('TheoryHypo Dev', 'submit')).toBe('TheoryHypo Submit');
+		expect(folderNameFor('My Draft Submit', 'dev')).toBe('My Draft Dev');
+		expect(folderNameFor('Developer', 'dev')).toBe('Developer Dev');
 	});
 	it('rejects bad folder names', () => {
 		expect(folderNameProblem('')).not.toBeNull();
@@ -115,12 +121,11 @@ describe('preambles', () => {
 		expect(DEFAULT_SUBMIT_PREAMBLE).toContain('\\fancyfoot[C]{\\scriptsize{\\thepage\\ of \\pageref{LastPage}}}');
 		expect(DEFAULT_SUBMIT_PREAMBLE).not.toContain('dottime}}');
 	});
-	it('both draw the cover page from \\maketitle', () => {
-		for (const p of [DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE]) {
-			expect(p).toContain('\\renewcommand{\\maketitle}');
-			expect(p).toContain('\\CoverLine{\\DocClass}\\CoverLine{\\DocClassNum}\\CoverLine{\\DocProf}\\CoverLine{\\DocDate}');
-			expect(p).not.toContain('Joshua S. Glazer');
-		}
+	it('Submit draws the cover page from \\maketitle; Dev has no title page', () => {
+		expect(DEFAULT_SUBMIT_PREAMBLE).toContain('\\CoverLine{\\DocClass}\\CoverLine{\\DocClassNum}\\CoverLine{\\DocProf}\\CoverLine{\\DocDate}');
+		expect(DEFAULT_DEV_PREAMBLE).toContain('\\renewcommand{\\maketitle}{}');
+		expect(DEFAULT_DEV_PREAMBLE).not.toContain('CoverLine');
+		for (const p of [DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE]) expect(p).not.toContain('Joshua S. Glazer');
 	});
 });
 

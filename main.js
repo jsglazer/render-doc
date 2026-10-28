@@ -96,6 +96,8 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
 \newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
 \newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderTitle}{\DocShortTitle}}
 
+`;
+var COVER_PAGE = String.raw`
 % Cover page (pandoc calls \maketitle at the start of the document).
 \newcommand{\CoverLine}[1]{\ifdefempty{#1}{}{#1\par\medskip}}
 \renewcommand{\maketitle}{%
@@ -123,6 +125,10 @@ var TABLE_LINES = String.raw`
 % Extra row height so the rules clear accents (hats, bars) on symbols.
 \renewcommand{\arraystretch}{1.3}
 `;
+var NO_TITLE = String.raw`
+% No title page in Dev (pandoc calls \maketitle at the start of the document).
+\renewcommand{\maketitle}{}
+`;
 var DEV_HEADER = String.raw`
 % Dev: title and author in the header; page x of y and a date/time stamp in the footer.
 \fancyhead{} % clear all header fields
@@ -144,8 +150,8 @@ var SUBMIT_HEADER = String.raw`
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0.4pt}
 `;
-var DEFAULT_DEV_PREAMBLE = `${COMMON}${DEV_HEADER}${TABLE_LINES}`;
-var DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${SUBMIT_HEADER}${TABLE_LINES}`;
+var DEFAULT_DEV_PREAMBLE = `${COMMON}${NO_TITLE}${DEV_HEADER}${TABLE_LINES}`;
+var DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${COVER_PAGE}${SUBMIT_HEADER}${TABLE_LINES}`;
 function preambleFingerprint(text2) {
   let h = 2166136261;
   for (let i = 0; i < text2.length; i++) {
@@ -154,7 +160,7 @@ function preambleFingerprint(text2) {
   }
   return h.toString(16).padStart(8, "0");
 }
-var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40"]);
+var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a"]);
 
 // src/core/settings.ts
 var DEFAULT_PARENT_DIR = "~/Library/CloudStorage/Dropbox/_Schar/Classes";
@@ -262,6 +268,10 @@ function pandocMetadata(meta) {
 function safeStem(name) {
   const cleaned = name.replace(/[/\\:]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/^\.+/, "").replace(/[.\s]+$/, "");
   return cleaned === "" ? "Document" : cleaned;
+}
+function folderNameFor(name, mode) {
+  const base = name.replace(/\s+(?:Dev|Submit)\s*$/, "");
+  return `${base} ${mode === "submit" ? "Submit" : "Dev"}`;
 }
 function folderNameProblem(name) {
   const t = name.trim();
@@ -1589,7 +1599,7 @@ var RenderExporter = class {
       stagedImages,
       noteDir: path.join(base, (_c = (_b = file.parent) == null ? void 0 : _b.path) != null ? _c : ""),
       parentDir: options.parentDir,
-      folderName: stem,
+      folderName: folderNameFor(stem, options.mode),
       stem,
       overwrite: false,
       lineNumbers: options.lineNumbers,
@@ -1682,6 +1692,7 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.statusEl = null;
     this.renderButton = null;
     this.parentText = null;
+    this.folderText = null;
   }
   onOpen() {
     const { contentEl, plan } = this;
@@ -1691,8 +1702,12 @@ var RenderModal = class extends import_obsidian2.Modal {
     contentEl.addClass("render-doc-modal");
     new import_obsidian2.Setting(contentEl).setName("Version").setDesc("Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp.").addDropdown(
       (d) => d.addOption("dev", "Dev").addOption("submit", "Submit").setValue(plan.mode).onChange((v) => {
+        var _a;
         plan.mode = v;
+        plan.folderName = folderNameFor(plan.folderName, plan.mode);
+        (_a = this.folderText) == null ? void 0 : _a.setValue(plan.folderName);
         this.showMode();
+        this.refresh();
       })
     );
     new import_obsidian2.Setting(contentEl).setName("Parent folder").setDesc("The export folder is created inside this folder.").addText((text2) => {
@@ -1712,12 +1727,13 @@ var RenderModal = class extends import_obsidian2.Modal {
         this.refresh();
       })
     );
-    new import_obsidian2.Setting(contentEl).setName("Folder name").setDesc("The folder holding the PDF, the .tex file, refs.bib and images. If it already exists, those files in it are overwritten.").addText(
-      (text2) => text2.setValue(plan.folderName).onChange((v) => {
+    new import_obsidian2.Setting(contentEl).setName("Folder name").setDesc("The folder holding the PDF, the .tex file, refs.bib and images. If it already exists, those files in it are overwritten.").addText((text2) => {
+      text2.setValue(plan.folderName).onChange((v) => {
         plan.folderName = v;
         this.refresh();
-      })
-    );
+      });
+      this.folderText = text2;
+    });
     this.statusEl = contentEl.createDiv({ cls: "render-doc-status" });
     new import_obsidian2.Setting(contentEl).setName("Line numbers").setDesc("Number every line of text in the left margin, counting through the whole document.").addToggle(
       (t) => t.setValue(plan.lineNumbers).onChange((v) => {

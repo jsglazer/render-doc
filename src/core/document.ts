@@ -86,6 +86,14 @@ export function safeStem(name: string): string {
 	return cleaned === '' ? 'Document' : cleaned;
 }
 
+// The export folder name for a version: "<name> Dev" or "<name> Submit". A
+// name already ending in either suffix has it swapped, so switching the
+// dialog's Version keeps any other edit to the name.
+export function folderNameFor(name: string, mode: 'dev' | 'submit'): string {
+	const base = name.replace(/\s+(?:Dev|Submit)\s*$/, '');
+	return `${base} ${mode === 'submit' ? 'Submit' : 'Dev'}`;
+}
+
 // Why a typed folder name can't be used, or null when it can.
 export function folderNameProblem(name: string): string | null {
 	const t = name.trim();

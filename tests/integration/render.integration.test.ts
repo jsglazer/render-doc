@@ -204,32 +204,28 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(pdfText(join(copy, 'Paper.pdf')).replace(/\s+/g, ' ')).toContain('(Bonica, 2018: 123)');
 	}, 300_000);
 
-	it('draws the cover page, then the text from page 1, then References on a page of its own', () => {
+	it('Dev: no title page; text from page 1, then References on a page of its own with the stamp', () => {
 		const pages = pdfText(join(parentDir, 'Paper', 'Paper.pdf')).split('\f').filter((p) => p.trim() !== '');
-		const cover = (pages[0] ?? '').replace(/\s+/g, ' ');
-		expect(cover).toContain('Polarization & Money');
-		expect(cover).toContain('Joshua S. Glazer');
-		expect(cover).toMatch(/POLS 501 \(POLS-501-001\) Dr\. Rivera/);
-		expect(cover).toContain('Dr. Rivera');
-		expect(cover).toContain('Wednesday, October 28th, 2026');
-		expect(cover).not.toContain('Campaign money');
-		expect(cover).not.toMatch(/\d+ of \d+/);
-		expect(pages[1]).toContain('Campaign money');
-		expect(pages[1]).toMatch(/1 of 2/);
-		const refs = pages[pages.length - 1] ?? '';
-		expect(refs).toMatch(/^\s*\S.*\n[\s\S]*References/);
+		expect(pages).toHaveLength(2);
+		const first = pages[0] ?? '';
+		expect(first).toMatch(/Polarization & Money\s+Joshua S\. Glazer/);
+		expect(first).toContain('Campaign money');
+		expect(first).not.toContain('Dr. Rivera');
+		expect(first).toMatch(/1 of 2/);
+		const refs = pages[1] ?? '';
+		expect(refs).toContain('References');
 		expect(refs).not.toContain('Campaign money');
 		expect(refs).toContain('Bonica, Adam. 2018.');
 		expect(refs).toMatch(/2 of 2/);
 		expect(refs).toMatch(/\d{4}-\d{2}-\d{2} at/);
 	});
 
-	it('Submit with line numbers: short title header, centred page count, no stamp, Obsidian line numbers', async () => {
+	it('Submit with line numbers: cover page, short title header, centred page count, no stamp, Obsidian line numbers', async () => {
 		const build2 = join(tmp, 'build-submit');
 		const parent2 = join(tmp, 'out-submit');
 		mkdirSync(join(build2, 'assets'), { recursive: true });
 		mkdirSync(parent2);
-		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization' }, 'Paper', 'Joshua S. Glazer');
+		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
 		const { files, job } = buildFiles(prepared, meta, { resourcePath: FIXTURES, parentDir: parent2, folderName: 'Paper', stem: 'Paper', overwrite: false }, { lineNumbers: true });
 		for (const [name, content] of Object.entries(files)) writeFileSync(join(build2, name), content, 'utf8');
 		writeFileSync(join(build2, 'preamble.tex'), DEFAULT_SUBMIT_PREAMBLE, 'utf8');
@@ -240,6 +236,13 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(st, JSON.stringify(st)).toMatchObject({ ok: true });
 
 		const pages = pdfText(join(parent2, 'Paper', 'Paper.pdf')).split('\f').filter((p) => p.trim() !== '');
+		const cover = (pages[0] ?? '').replace(/\s+/g, ' ');
+		expect(cover).toContain('Polarization & Money');
+		expect(cover).toContain('Joshua S. Glazer');
+		expect(cover).toMatch(/POLS 501 \(POLS-501-001\) Dr\. Rivera/);
+		expect(cover).toContain('Wednesday, October 28th, 2026');
+		expect(cover).not.toContain('Campaign money');
+		expect(cover).not.toMatch(/\d+ of \d+/);
 		const body = pages[1] ?? '';
 		expect(body).toMatch(/Polarization\s+Joshua S\. Glazer/);
 		expect(body).not.toContain('Polarization & Money Joshua');

@@ -8,11 +8,13 @@
 // Each is \providecommand'ed here too, so the delivered .tex and a preamble
 // used on its own still compile.
 //
-// \maketitle is redefined as the cover page, modelled on an APA student title
-// page without its running head, "Full Title" line or due-date label: title,
-// author, then class, class number, professor and date at the foot, each
-// line skipped when empty. The title wraps within the middle 56% of the page. The cover has no header or footer and is not counted, so the first
-// page of text is page 1 of N.
+// Submit redefines \maketitle as the cover page, modelled on an APA student
+// title page without its running head, "Full Title" line or due-date label:
+// title, author, then class, class number, professor and date at the foot,
+// each line skipped when empty. The title wraps within the middle 56% of the
+// page. The cover has no header or footer and is not counted, so the first
+// page of text is page 1 of N. Dev has no title page at all: its \maketitle
+// prints nothing, and the header carries the title.
 
 const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.75in, includehead, includefoot, marginparwidth=.75in, marginparsep=.125in]{geometry}
 \setlength{\parskip}{.15in}
@@ -44,6 +46,9 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
 \newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
 \newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderTitle}{\DocShortTitle}}
 
+`;
+
+const COVER_PAGE = String.raw`
 % Cover page (pandoc calls \maketitle at the start of the document).
 \newcommand{\CoverLine}[1]{\ifdefempty{#1}{}{#1\par\medskip}}
 \renewcommand{\maketitle}{%
@@ -73,6 +78,11 @@ const TABLE_LINES = String.raw`
 \renewcommand{\arraystretch}{1.3}
 `;
 
+const NO_TITLE = String.raw`
+% No title page in Dev (pandoc calls \maketitle at the start of the document).
+\renewcommand{\maketitle}{}
+`;
+
 const DEV_HEADER = String.raw`
 % Dev: title and author in the header; page x of y and a date/time stamp in the footer.
 \fancyhead{} % clear all header fields
@@ -96,8 +106,8 @@ const SUBMIT_HEADER = String.raw`
 \renewcommand{\footrulewidth}{0.4pt}
 `;
 
-export const DEFAULT_DEV_PREAMBLE = `${COMMON}${DEV_HEADER}${TABLE_LINES}`;
-export const DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${SUBMIT_HEADER}${TABLE_LINES}`;
+export const DEFAULT_DEV_PREAMBLE = `${COMMON}${NO_TITLE}${DEV_HEADER}${TABLE_LINES}`;
+export const DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${COVER_PAGE}${SUBMIT_HEADER}${TABLE_LINES}`;
 
 // FNV-1a fingerprint, enough to recognise an unedited copy of an old default.
 export function preambleFingerprint(text: string): string {
@@ -109,7 +119,7 @@ export function preambleFingerprint(text: string): string {
 	return h.toString(16).padStart(8, '0');
 }
 
-// Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit). A saved preamble that
+// Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit, 1.0.5 Dev, 1.0.5 Submit). A saved preamble that
 // matches one was never edited, so it follows the current default instead.
 // Add the old fingerprints here whenever a default changes.
-export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40']);
+export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40', 'f19a1df5', '2afbc73a']);

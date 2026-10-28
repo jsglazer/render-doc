@@ -12,6 +12,7 @@ import type { App } from 'obsidian';
 import { Modal, Setting } from 'obsidian';
 
 import type { TargetCheck } from '../core/document';
+import { folderNameFor } from '../core/document';
 import type { RenderMode } from '../core/settings';
 import type { RenderPlan } from '../export/exporter';
 
@@ -25,6 +26,7 @@ export class RenderModal extends Modal {
 	private statusEl: HTMLElement | null = null;
 	private renderButton: { setDisabled(disabled: boolean): unknown } | null = null;
 	private parentText: { setValue(value: string): unknown } | null = null;
+	private folderText: { setValue(value: string): unknown } | null = null;
 
 	constructor(
 		app: App,
@@ -51,7 +53,10 @@ export class RenderModal extends Modal {
 					.setValue(plan.mode)
 					.onChange((v) => {
 						plan.mode = v as RenderMode;
+						plan.folderName = folderNameFor(plan.folderName, plan.mode);
+						this.folderText?.setValue(plan.folderName);
 						this.showMode();
+						this.refresh();
 					}),
 			);
 
@@ -79,12 +84,13 @@ export class RenderModal extends Modal {
 		new Setting(contentEl)
 			.setName('Folder name')
 			.setDesc('The folder holding the PDF, the .tex file, refs.bib and images. If it already exists, those files in it are overwritten.')
-			.addText((text) =>
+			.addText((text) => {
 				text.setValue(plan.folderName).onChange((v) => {
 					plan.folderName = v;
 					this.refresh();
-				}),
-			);
+				});
+				this.folderText = text;
+			});
 		this.statusEl = contentEl.createDiv({ cls: 'render-doc-status' });
 
 		new Setting(contentEl)
