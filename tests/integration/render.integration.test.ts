@@ -116,13 +116,18 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		prepared = await prepareDocument(NOTE, 'Classes/Polarization/Paper.md', '@', resolver, discovery.index);
 		unmatchedCount = prepared.citations.unmatched.length;
 		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
-		const { files, job } = buildFiles(prepared, meta, {
-			resourcePath: FIXTURES,
-			parentDir,
-			folderName: 'Paper',
-			stem: 'Paper',
-			overwrite: false,
-		});
+		const { files, job } = buildFiles(
+			prepared,
+			meta,
+			{
+				resourcePath: FIXTURES,
+				parentDir,
+				folderName: 'Paper',
+				stem: 'Paper',
+				overwrite: false,
+			},
+			{ lineNumbers: true, mode: 'dev' },
+		);
 		for (const [name, content] of Object.entries(files)) writeFileSync(join(buildDir, name), content, 'utf8');
 		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_DEV_PREAMBLE, 'utf8');
 		copyFileSync(join(FIXTURES, 'refs.bib'), join(buildDir, 'refs.bib'));
@@ -168,7 +173,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(text).toContain('Shor, Boris, and Nolan McCarty. 2011.');
 		expect(text).not.toContain('Outline entry');
 		expect(text).not.toContain('###');
-		expect(text).toMatch(/highlighted, as does prose about code like \(Bonica, 2018\)\. \S*\s*State-level data A heading/);
+		expect(text).toMatch(/highlighted, as does prose about code like \(Bonica, 2018\)\. \S*\s*(?:13\s+)?State-level data (?:14\s+)?A heading/);
 		expect(text).not.toMatch(/p\. ?123/);
 	});
 
@@ -204,7 +209,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(pdfText(join(copy, 'Paper.pdf')).replace(/\s+/g, ' ')).toContain('(Bonica, 2018: 123)');
 	}, 300_000);
 
-	it('Dev: no title page; text from page 1, then References on a page of its own with the stamp', () => {
+	it('Dev with line numbers: no title page; text from page 1 with Obsidian line numbers, then References on a page of its own with the stamp', () => {
 		const pages = pdfText(join(parentDir, 'Paper', 'Paper.pdf')).split('\f').filter((p) => p.trim() !== '');
 		expect(pages).toHaveLength(2);
 		const first = pages[0] ?? '';
@@ -212,6 +217,12 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(first).toContain('Campaign money');
 		expect(first).not.toContain('Dr. Rivera');
 		expect(first).toMatch(/1 of 2/);
+		// By Obsidian's count: 10 and 12 are paragraphs, 13 a heading typed under text, 14 its text.
+		expect(first).toMatch(/^\s*10\s+Campaign money/m);
+		expect(first).toMatch(/^\s*12\s+An uncited claim/m);
+		expect(first).toMatch(/^\s*13\s+.*State-level data/m);
+		expect(first).toMatch(/^\s*14\s+A heading typed/m);
+		expect(readFileSync(join(parentDir, 'Paper', 'Paper.tex'), 'utf8')).toContain('\\rdln{10}');
 		const refs = pages[1] ?? '';
 		expect(refs).toContain('References');
 		expect(refs).not.toContain('Campaign money');
@@ -220,13 +231,13 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(refs).toMatch(/\d{4}-\d{2}-\d{2} at/);
 	});
 
-	it('Submit with line numbers: cover page, short title header, centred page count, no stamp, Obsidian line numbers', async () => {
+	it('Submit: cover page, short title header, centred page count, no stamp, and no line numbers even when asked', async () => {
 		const build2 = join(tmp, 'build-submit');
 		const parent2 = join(tmp, 'out-submit');
 		mkdirSync(join(build2, 'assets'), { recursive: true });
 		mkdirSync(parent2);
 		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
-		const { files, job } = buildFiles(prepared, meta, { resourcePath: FIXTURES, parentDir: parent2, folderName: 'Paper', stem: 'Paper', overwrite: false }, { lineNumbers: true });
+		const { files, job } = buildFiles(prepared, meta, { resourcePath: FIXTURES, parentDir: parent2, folderName: 'Paper', stem: 'Paper', overwrite: false }, { lineNumbers: true, mode: 'submit' });
 		for (const [name, content] of Object.entries(files)) writeFileSync(join(build2, name), content, 'utf8');
 		writeFileSync(join(build2, 'preamble.tex'), DEFAULT_SUBMIT_PREAMBLE, 'utf8');
 		copyFileSync(join(FIXTURES, 'refs.bib'), join(build2, 'refs.bib'));
@@ -248,14 +259,9 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(body).not.toContain('Polarization & Money Joshua');
 		expect(body).toMatch(/^\s+1 of 2\s*$/m);
 		expect(body).not.toMatch(/\d{4}-\d{2}-\d{2} at/);
-		// By Obsidian's count: 10 and 12 are paragraphs, 13 a heading typed under text, 14 its text.
-		expect(body).toMatch(/^\s*10\s+Campaign money/m);
-		expect(body).toMatch(/^\s*12\s+An uncited claim/m);
-		expect(body).toMatch(/^\s*13\s+.*State-level data/m);
-		expect(body).toMatch(/^\s*14\s+A heading typed/m);
-		// Running head and bookmarks stay clean of the markers.
+		expect(body).not.toMatch(/^\s*10\s+Campaign money/m);
 		const tex = readFileSync(join(parent2, 'Paper', 'Paper.tex'), 'utf8');
-		expect(tex).toContain('\\rdln{10}');
+		expect(tex).not.toContain('rdln');
 	}, 300_000);
 
 	it('overwrites only its own files when the job says overwrite', () => {

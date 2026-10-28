@@ -59,5 +59,8 @@ describe('prepareDocument line numbers', () => {
 		const target = { resourcePath: '/v', parentDir: '/out', folderName: 'P', stem: 'P', overwrite: false };
 		expect(buildFiles(p, readDocMeta({}, 'P'), target, { lineNumbers: true }).files['source.md']).toContain('\\rdln{10}');
 		expect(buildFiles(p, readDocMeta({}, 'P'), target).files['source.md']).not.toContain('rdln');
+		const submit = buildFiles(p, readDocMeta({}, 'P'), target, { lineNumbers: true, mode: 'submit' }).files;
+		expect(submit['source.md']).not.toContain('rdln');
+		expect(submit['cite.tex']).not.toContain('rdln');
 	});
 });

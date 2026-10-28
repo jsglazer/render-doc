@@ -13,6 +13,8 @@ import { BIBLIOGRAPHY_TRAILER, citeHeader, metaHeader } from './latex';
 import { markersToLatex, markSourceLines, stripMarkers } from './lineMarkers';
 import type { ConversionIssue, ExportResolver } from './obsidianMarkdown';
 import { toPandocMarkdown } from './obsidianMarkdown';
+import type { RenderMode } from './settings';
+import { lineNumbersAllowed } from './settings';
 import type { CiteIndex } from './sources';
 
 export interface PreparedDocument {
@@ -78,13 +80,14 @@ export function buildFiles(
 	prepared: PreparedDocument,
 	meta: DocMeta,
 	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
-	options: { lineNumbers?: boolean } = {},
+	options: { lineNumbers?: boolean; mode?: RenderMode } = {},
 ): BuildFiles {
 	const cites = prepared.citations.citekeys.length > 0;
+	const numbered = options.lineNumbers === true && lineNumbersAllowed(options.mode ?? 'dev');
 	const files: Record<string, string> = {
-		'source.md': `${options.lineNumbers === true ? prepared.numberedMarkdown : prepared.markdown}\n`,
+		'source.md': `${numbered ? prepared.numberedMarkdown : prepared.markdown}\n`,
 		'meta.tex': metaHeader(meta),
-		'cite.tex': citeHeader(cites, options.lineNumbers ?? false),
+		'cite.tex': citeHeader(cites, numbered),
 		'meta.json': `${JSON.stringify(pandocMetadata(meta), null, 2)}\n`,
 	};
 	if (cites) files['after.tex'] = BIBLIOGRAPHY_TRAILER;

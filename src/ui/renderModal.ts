@@ -3,7 +3,8 @@
 // a warning that Render will overwrite it, a bad name or missing parent
 // disables Render — and a summary: source notes found, citations resolved,
 // citations left highlighted, with every warning. A Dev/Submit selector and a
-// line-numbers toggle, both remembered between renders. No font size.
+// line-numbers toggle, both remembered between renders. The toggle is Dev
+// only: Submit never prints line numbers, so it is hidden there. No font size.
 //
 // The title sits in an alert box: yellow for Dev, red for Submit, so a
 // working draft is hard to mistake for the copy being handed in.
@@ -14,6 +15,7 @@ import { Modal, Setting } from 'obsidian';
 import type { TargetCheck } from '../core/document';
 import { folderNameFor } from '../core/document';
 import type { RenderMode } from '../core/settings';
+import { lineNumbersAllowed } from '../core/settings';
 import type { RenderPlan } from '../export/exporter';
 
 export interface RenderModalHooks {
@@ -27,6 +29,7 @@ export class RenderModal extends Modal {
 	private renderButton: { setDisabled(disabled: boolean): unknown } | null = null;
 	private parentText: { setValue(value: string): unknown } | null = null;
 	private folderText: { setValue(value: string): unknown } | null = null;
+	private lineNumbersEl: HTMLElement | null = null;
 
 	constructor(
 		app: App,
@@ -93,14 +96,15 @@ export class RenderModal extends Modal {
 			});
 		this.statusEl = contentEl.createDiv({ cls: 'render-doc-status' });
 
-		new Setting(contentEl)
+		this.lineNumbersEl = new Setting(contentEl)
 			.setName('Line numbers')
-			.setDesc('Number every line of text in the left margin, counting through the whole document.')
+			.setDesc("Print the note's own line numbers in the left margin. Dev only.")
 			.addToggle((t) =>
 				t.setValue(plan.lineNumbers).onChange((v) => {
 					plan.lineNumbers = v;
 				}),
-			);
+			).settingEl;
+		this.showMode();
 
 		new Setting(contentEl)
 			.setName('Open export folder')
@@ -138,6 +142,7 @@ export class RenderModal extends Modal {
 	private showMode(): void {
 		this.titleEl.toggleClass('is-dev', this.plan.mode === 'dev');
 		this.titleEl.toggleClass('is-submit', this.plan.mode === 'submit');
+		this.lineNumbersEl?.toggle(lineNumbersAllowed(this.plan.mode));
 	}
 
 	private refresh(): void {

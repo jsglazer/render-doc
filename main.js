@@ -210,6 +210,9 @@ function initialParentDir(settings, home) {
 function preambleFor(settings, mode) {
   return mode === "submit" ? settings.submitPreamble : settings.devPreamble;
 }
+function lineNumbersAllowed(mode) {
+  return mode === "dev";
+}
 
 // src/export/exporter.ts
 var import_obsidian = require("obsidian");
@@ -1044,11 +1047,12 @@ var BIB_FILE = "refs.bib";
 function buildFiles(prepared, meta, target, options = {}) {
   var _a;
   const cites = prepared.citations.citekeys.length > 0;
+  const numbered = options.lineNumbers === true && lineNumbersAllowed((_a = options.mode) != null ? _a : "dev");
   const files = {
-    "source.md": `${options.lineNumbers === true ? prepared.numberedMarkdown : prepared.markdown}
+    "source.md": `${numbered ? prepared.numberedMarkdown : prepared.markdown}
 `,
     "meta.tex": metaHeader(meta),
-    "cite.tex": citeHeader(cites, (_a = options.lineNumbers) != null ? _a : false),
+    "cite.tex": citeHeader(cites, numbered),
     "meta.json": `${JSON.stringify(pandocMetadata(meta), null, 2)}
 `
   };
@@ -1660,7 +1664,7 @@ var RenderExporter = class {
         stem: plan.stem,
         overwrite: plan.overwrite
       },
-      { lineNumbers: plan.lineNumbers }
+      { lineNumbers: plan.lineNumbers, mode: plan.mode }
     );
     for (const [name, content] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(buildDir, name), content, "utf8");
@@ -1693,6 +1697,7 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.renderButton = null;
     this.parentText = null;
     this.folderText = null;
+    this.lineNumbersEl = null;
   }
   onOpen() {
     const { contentEl, plan } = this;
@@ -1735,11 +1740,12 @@ var RenderModal = class extends import_obsidian2.Modal {
       this.folderText = text2;
     });
     this.statusEl = contentEl.createDiv({ cls: "render-doc-status" });
-    new import_obsidian2.Setting(contentEl).setName("Line numbers").setDesc("Number every line of text in the left margin, counting through the whole document.").addToggle(
+    this.lineNumbersEl = new import_obsidian2.Setting(contentEl).setName("Line numbers").setDesc("Print the note's own line numbers in the left margin. Dev only.").addToggle(
       (t) => t.setValue(plan.lineNumbers).onChange((v) => {
         plan.lineNumbers = v;
       })
-    );
+    ).settingEl;
+    this.showMode();
     new import_obsidian2.Setting(contentEl).setName("Open export folder").setDesc("Show the new PDF in Finder when rendering finishes.").addToggle(
       (t) => t.setValue(plan.openFolder).onChange((v) => {
         plan.openFolder = v;
@@ -1762,8 +1768,10 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.contentEl.empty();
   }
   showMode() {
+    var _a;
     this.titleEl.toggleClass("is-dev", this.plan.mode === "dev");
     this.titleEl.toggleClass("is-submit", this.plan.mode === "submit");
+    (_a = this.lineNumbersEl) == null ? void 0 : _a.toggle(lineNumbersAllowed(this.plan.mode));
   }
   refresh() {
     var _a;

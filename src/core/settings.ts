@@ -15,7 +15,7 @@ export interface RenderDocSettings {
 	// The LaTeX preambles, edited on the settings page (they replaced LatexPre.tex).
 	devPreamble: string;
 	submitPreamble: string;
-	// The dialog's "Line numbers" toggle last time.
+	// The dialog's "Line numbers" toggle last time (Dev only; Submit never numbers).
 	lineNumbers: boolean;
 	// The dialog's Dev/Submit choice last time.
 	mode: RenderMode;
@@ -83,4 +83,9 @@ export function initialParentDir(settings: RenderDocSettings, home: string): str
 
 export function preambleFor(settings: RenderDocSettings, mode: RenderMode): string {
 	return mode === 'submit' ? settings.submitPreamble : settings.devPreamble;
+}
+
+// Line numbers are a Dev aid: the copy handed in never carries them (Josh, Update000).
+export function lineNumbersAllowed(mode: RenderMode): boolean {
+	return mode === 'dev';
 }

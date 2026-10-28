@@ -190,7 +190,7 @@ export class RenderExporter {
 				stem: plan.stem,
 				overwrite: plan.overwrite,
 			},
-			{ lineNumbers: plan.lineNumbers },
+			{ lineNumbers: plan.lineNumbers, mode: plan.mode },
 		);
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');
