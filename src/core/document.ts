@@ -6,7 +6,8 @@ export interface DocMeta {
 	title: string; // frontmatter title, else the note's basename
 	shortTitle: string; // titleshort:, else the title (the Submit header)
 	authors: string[]; // the note's author:, else the Default author setting
-	className: string | null; // class:
+	className: string | null; // class: (or course:)
+	classNum: string | null; // coursenum: (or classnum:), printed under the class
 	prof: string | null; // prof:
 	date: string | null; // date:, as written
 }
@@ -29,7 +30,8 @@ export function readDocMeta(frontmatter: Readonly<Record<string, unknown>> | und
 		title,
 		shortTitle: asText(fm.titleshort) ?? title,
 		authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
-		className: asText(fm.class),
+		className: asText(fm.class) ?? asText(fm.course),
+		classNum: asText(fm.coursenum) ?? asText(fm.classnum),
 		prof: asText(fm.prof),
 		date: asText(fm.date),
 	};
@@ -45,14 +47,20 @@ function ordinal(n: number): string {
 }
 
 // The cover page date, "Monday, January 1st, 2020", from a date: such as
-// 2020-01-01 (a time after it is ignored). Anything else is printed as written.
-export function formatCoverDate(raw: string | null): string | null {
-	if (raw === null) return null;
+// 2020-01-01 (a time after it is ignored); a blank date: is today. Anything
+// else is printed as written.
+export function formatCoverDate(raw: string | null, today: Date = new Date()): string {
+	if (raw === null) return longDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
 	const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/.exec(raw.trim());
 	if (!m) return raw;
 	const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
 	const d = new Date(Date.UTC(year, month - 1, day));
 	if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return raw;
+	return longDate(year, month, day);
+}
+
+function longDate(year: number, month: number, day: number): string {
+	const d = new Date(Date.UTC(year, month - 1, day));
 	return `${WEEKDAYS[d.getUTCDay()] ?? ''}, ${MONTHS[month - 1] ?? ''} ${ordinal(day)}, ${year}`;
 }
 

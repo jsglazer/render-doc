@@ -1,6 +1,6 @@
 // Plugin settings. Pure — no 'obsidian'.
 
-import { DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE } from './preambles';
+import { DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE, preambleFingerprint, RETIRED_DEFAULT_FINGERPRINTS } from './preambles';
 
 // Dev: the working draft (title + author header, page x of y bottom left,
 // date/time stamp bottom right). Submit: the copy handed in (short title and
@@ -19,6 +19,8 @@ export interface RenderDocSettings {
 	lineNumbers: boolean;
 	// The dialog's Dev/Submit choice last time.
 	mode: RenderMode;
+	// The dialog's "Open export folder" toggle last time; off until turned on.
+	openFolder: boolean;
 }
 
 export const DEFAULT_PARENT_DIR = '~/Library/CloudStorage/Dropbox/_Schar/Classes';
@@ -30,6 +32,7 @@ export const DEFAULT_SETTINGS: RenderDocSettings = {
 	submitPreamble: DEFAULT_SUBMIT_PREAMBLE,
 	lineNumbers: false,
 	mode: 'dev',
+	openFolder: false,
 };
 
 function text(value: unknown, fallback: string): string {
@@ -37,9 +40,20 @@ function text(value: unknown, fallback: string): string {
 }
 
 // A preamble cleared to nothing falls back to the default, so clearing the
-// box is another way to reset it.
+// box is another way to reset it. So does an unedited copy of an older default.
 function preamble(value: unknown, fallback: string): string {
-	return typeof value === 'string' && value.trim() !== '' ? value : fallback;
+	if (typeof value !== 'string' || value.trim() === '') return fallback;
+	return RETIRED_DEFAULT_FINGERPRINTS.has(preambleFingerprint(value)) ? fallback : value;
+}
+
+// What data.json holds: a preamble equal to the current default is saved
+// empty, so a later default reaches it.
+export function settingsToSave(settings: RenderDocSettings): RenderDocSettings {
+	return {
+		...settings,
+		devPreamble: settings.devPreamble === DEFAULT_DEV_PREAMBLE ? '' : settings.devPreamble,
+		submitPreamble: settings.submitPreamble === DEFAULT_SUBMIT_PREAMBLE ? '' : settings.submitPreamble,
+	};
 }
 
 export function mergeSettings(saved: unknown): RenderDocSettings {
@@ -51,6 +65,7 @@ export function mergeSettings(saved: unknown): RenderDocSettings {
 		submitPreamble: preamble(s.submitPreamble, DEFAULT_SETTINGS.submitPreamble),
 		lineNumbers: typeof s.lineNumbers === 'boolean' ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
 		mode: s.mode === 'submit' ? 'submit' : 'dev',
+		openFolder: typeof s.openFolder === 'boolean' ? s.openFolder : DEFAULT_SETTINGS.openFolder,
 	};
 }
 

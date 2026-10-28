@@ -53,6 +53,7 @@ const NOTE = [
 	'title: Polarization & Money',
 	'titleshort: Polarization',
 	'class: POLS 501',
+	'coursenum: (POLS-501-001)',
 	'prof: Dr. Rivera',
 	'date: 2026-10-28',
 	'---',
@@ -114,7 +115,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		};
 		prepared = await prepareDocument(NOTE, 'Classes/Polarization/Paper.md', '@', resolver, discovery.index);
 		unmatchedCount = prepared.citations.unmatched.length;
-		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
+		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
 		const { files, job } = buildFiles(prepared, meta, {
 			resourcePath: FIXTURES,
 			parentDir,
@@ -208,7 +209,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		const cover = (pages[0] ?? '').replace(/\s+/g, ' ');
 		expect(cover).toContain('Polarization & Money');
 		expect(cover).toContain('Joshua S. Glazer');
-		expect(cover).toContain('POLS 501');
+		expect(cover).toMatch(/POLS 501 \(POLS-501-001\) Dr\. Rivera/);
 		expect(cover).toContain('Dr. Rivera');
 		expect(cover).toContain('Wednesday, October 28th, 2026');
 		expect(cover).not.toContain('Campaign money');
@@ -244,14 +245,14 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(body).not.toContain('Polarization & Money Joshua');
 		expect(body).toMatch(/^\s+1 of 2\s*$/m);
 		expect(body).not.toMatch(/\d{4}-\d{2}-\d{2} at/);
-		// By Obsidian's count: 9 and 11 are paragraphs, 12 a heading typed under text, 13 its text.
-		expect(body).toMatch(/^\s*9\s+Campaign money/m);
-		expect(body).toMatch(/^\s*11\s+An uncited claim/m);
-		expect(body).toMatch(/^\s*12\s+.*State-level data/m);
-		expect(body).toMatch(/^\s*13\s+A heading typed/m);
+		// By Obsidian's count: 10 and 12 are paragraphs, 13 a heading typed under text, 14 its text.
+		expect(body).toMatch(/^\s*10\s+Campaign money/m);
+		expect(body).toMatch(/^\s*12\s+An uncited claim/m);
+		expect(body).toMatch(/^\s*13\s+.*State-level data/m);
+		expect(body).toMatch(/^\s*14\s+A heading typed/m);
 		// Running head and bookmarks stay clean of the markers.
 		const tex = readFileSync(join(parent2, 'Paper', 'Paper.tex'), 'utf8');
-		expect(tex).toContain('\\rdln{9}');
+		expect(tex).toContain('\\rdln{10}');
 	}, 300_000);
 
 	it('overwrites only its own files when the job says overwrite', () => {

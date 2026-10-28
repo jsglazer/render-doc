@@ -1,6 +1,6 @@
 {
 	"name": "render-doc",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "Render the current note as a LaTeX-typeset academic paper: short citations like (Bonica, 2018: 123) become biblatex \\autocite commands, with a bibliography from Zotero, delivered in its own export folder.",
 	"main": "main.js",
 	"type": "module",

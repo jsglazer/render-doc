@@ -1,7 +1,7 @@
 {
 	"id": "render-doc",
 	"name": "Render Doc",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"minAppVersion": "1.7.2",
 	"description": "Render the current note as a LaTeX-typeset paper with biblatex citations resolved from source notes and a bibliography from Zotero.",
 	"author": "Josh Glazer",

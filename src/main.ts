@@ -11,7 +11,7 @@ import { MarkdownView, Notice, Plugin } from 'obsidian';
 
 import { pickFolder, revealInFinder } from './adapter/obsidianInternals';
 import type { RenderDocSettings } from './core/settings';
-import { expandHome, initialParentDir, mergeSettings, preambleFor } from './core/settings';
+import { expandHome, initialParentDir, mergeSettings, preambleFor, settingsToSave } from './core/settings';
 import type { RenderPlan } from './export/exporter';
 import { RenderExporter } from './export/exporter';
 import { pruneBuildDirs } from './export/installer';
@@ -48,7 +48,7 @@ export default class RenderDocPlugin extends Plugin {
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+		await this.saveData(settingsToSave(this.settings));
 	}
 
 	async pickFolder(current: string): Promise<string | null> {
@@ -70,6 +70,7 @@ export default class RenderDocPlugin extends Plugin {
 			parentDir,
 			lineNumbers: this.settings.lineNumbers,
 			mode: this.settings.mode,
+			openFolder: this.settings.openFolder,
 			defaultAuthor: this.settings.defaultAuthor,
 		});
 		if (typeof plan === 'string') {
@@ -87,6 +88,7 @@ export default class RenderDocPlugin extends Plugin {
 		this.busy = true;
 		this.settings.lineNumbers = plan.lineNumbers;
 		this.settings.mode = plan.mode;
+		this.settings.openFolder = plan.openFolder;
 		await this.saveSettings();
 		const progress = new Notice('Render Doc: starting…', 0);
 		try {
@@ -100,7 +102,7 @@ export default class RenderDocPlugin extends Plugin {
 			const unmatched = plan.prepared.citations.unmatched.length;
 			const tail = unmatched > 0 ? `\n${unmatched} citation${unmatched === 1 ? ' is' : 's are'} highlighted as unmatched.` : '';
 			new Notice(`Rendered to ${outcome.folder}${tail}`, 10000);
-			revealInFinder(outcome.pdf);
+			if (plan.openFolder) revealInFinder(outcome.pdf);
 		} catch (e) {
 			progress.hide();
 			new Notice(`Render Doc failed: ${e instanceof Error ? e.message : String(e)}`, ERROR_NOTICE_MS);

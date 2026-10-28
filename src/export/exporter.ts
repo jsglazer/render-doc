@@ -50,12 +50,14 @@ export interface RenderPlan {
 	overwrite: boolean;
 	lineNumbers: boolean; // edited by the dialog
 	mode: RenderMode; // edited by the dialog: which preamble to use
+	openFolder: boolean; // edited by the dialog: reveal the PDF in Finder afterwards
 }
 
 export interface PlanOptions {
 	parentDir: string;
 	lineNumbers: boolean;
 	mode: RenderMode;
+	openFolder: boolean;
 	defaultAuthor: string;
 }
 
@@ -125,6 +127,7 @@ export class RenderExporter {
 			overwrite: false,
 			lineNumbers: options.lineNumbers,
 			mode: options.mode,
+			openFolder: options.openFolder,
 		};
 	}
 

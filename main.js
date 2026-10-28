@@ -84,12 +84,13 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
 
 % Per-note values, set by Render Doc's meta.tex from the note's frontmatter
-% (title, titleshort, author, class, prof, date). Empty when absent; the
+% (title, titleshort, author, class, coursenum, prof, date). Empty when absent; the
 % header title falls back to \jobname, the short title to the title.
 \providecommand{\DocTitle}{}
 \providecommand{\DocShortTitle}{}
 \providecommand{\DocAuthor}{}
 \providecommand{\DocClass}{}
+\providecommand{\DocClassNum}{}
 \providecommand{\DocProf}{}
 \providecommand{\DocDate}{}
 \newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
@@ -101,12 +102,12 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
   \pagenumbering{Alph}%
   \thispagestyle{empty}%
   \begin{center}
-    \vspace*{.25\textheight}
-    {\LARGE \HeaderTitle\par}
+    \vspace*{\dimexpr .25\textheight - 1in\relax}
+    \parbox{.56\textwidth}{\centering\LARGE \HeaderTitle\par}\par
     \vspace{.12\textheight}
     {\large \DocAuthor\par}
     \vfill
-    {\large \CoverLine{\DocClass}\CoverLine{\DocProf}\CoverLine{\DocDate}}
+    {\large \CoverLine{\DocClass}\CoverLine{\DocClassNum}\CoverLine{\DocProf}\CoverLine{\DocDate}}
   \end{center}
   \clearpage
   \pagenumbering{arabic}%
@@ -145,6 +146,15 @@ var SUBMIT_HEADER = String.raw`
 `;
 var DEFAULT_DEV_PREAMBLE = `${COMMON}${DEV_HEADER}${TABLE_LINES}`;
 var DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${SUBMIT_HEADER}${TABLE_LINES}`;
+function preambleFingerprint(text2) {
+  let h = 2166136261;
+  for (let i = 0; i < text2.length; i++) {
+    h ^= text2.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40"]);
 
 // src/core/settings.ts
 var DEFAULT_PARENT_DIR = "~/Library/CloudStorage/Dropbox/_Schar/Classes";
@@ -154,13 +164,22 @@ var DEFAULT_SETTINGS = {
   devPreamble: DEFAULT_DEV_PREAMBLE,
   submitPreamble: DEFAULT_SUBMIT_PREAMBLE,
   lineNumbers: false,
-  mode: "dev"
+  mode: "dev",
+  openFolder: false
 };
 function text(value, fallback) {
   return typeof value === "string" ? value : fallback;
 }
 function preamble(value, fallback) {
-  return typeof value === "string" && value.trim() !== "" ? value : fallback;
+  if (typeof value !== "string" || value.trim() === "") return fallback;
+  return RETIRED_DEFAULT_FINGERPRINTS.has(preambleFingerprint(value)) ? fallback : value;
+}
+function settingsToSave(settings) {
+  return {
+    ...settings,
+    devPreamble: settings.devPreamble === DEFAULT_DEV_PREAMBLE ? "" : settings.devPreamble,
+    submitPreamble: settings.submitPreamble === DEFAULT_SUBMIT_PREAMBLE ? "" : settings.submitPreamble
+  };
 }
 function mergeSettings(saved) {
   const s = saved !== null && typeof saved === "object" ? saved : {};
@@ -170,7 +189,8 @@ function mergeSettings(saved) {
     devPreamble: preamble(s.devPreamble, DEFAULT_SETTINGS.devPreamble),
     submitPreamble: preamble(s.submitPreamble, DEFAULT_SETTINGS.submitPreamble),
     lineNumbers: typeof s.lineNumbers === "boolean" ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
-    mode: s.mode === "submit" ? "submit" : "dev"
+    mode: s.mode === "submit" ? "submit" : "dev",
+    openFolder: typeof s.openFolder === "boolean" ? s.openFolder : DEFAULT_SETTINGS.openFolder
   };
 }
 function expandHome(dir, home) {
@@ -195,7 +215,7 @@ function asText(value) {
   return null;
 }
 function readDocMeta(frontmatter, basename, defaultAuthor = "") {
-  var _a, _b;
+  var _a, _b, _c, _d;
   const fm = frontmatter != null ? frontmatter : {};
   const rawAuthor = fm.author;
   const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a) => a !== null);
@@ -205,7 +225,8 @@ function readDocMeta(frontmatter, basename, defaultAuthor = "") {
     title,
     shortTitle: (_b = asText(fm.titleshort)) != null ? _b : title,
     authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
-    className: asText(fm.class),
+    className: (_c = asText(fm.class)) != null ? _c : asText(fm.course),
+    classNum: (_d = asText(fm.coursenum)) != null ? _d : asText(fm.classnum),
     prof: asText(fm.prof),
     date: asText(fm.date)
   };
@@ -218,14 +239,18 @@ function ordinal(n) {
   if (tens >= 11 && tens <= 13) return `${n}th`;
   return `${n}${(_a = ["th", "st", "nd", "rd"][n % 10]) != null ? _a : "th"}`;
 }
-function formatCoverDate(raw) {
-  var _a, _b;
-  if (raw === null) return null;
+function formatCoverDate(raw, today = /* @__PURE__ */ new Date()) {
+  if (raw === null) return longDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
   const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/.exec(raw.trim());
   if (!m) return raw;
   const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const d = new Date(Date.UTC(year, month - 1, day));
   if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return raw;
+  return longDate(year, month, day);
+}
+function longDate(year, month, day) {
+  var _a, _b;
+  const d = new Date(Date.UTC(year, month - 1, day));
   return `${(_a = WEEKDAYS[d.getUTCDay()]) != null ? _a : ""}, ${(_b = MONTHS[month - 1]) != null ? _b : ""} ${ordinal(day)}, ${year}`;
 }
 function pandocMetadata(meta) {
@@ -424,6 +449,7 @@ function metaHeader(meta) {
     def("DocShortTitle", meta.shortTitle),
     `\\def\\DocAuthor{${author}}`,
     def("DocClass", meta.className),
+    def("DocClassNum", meta.classNum),
     def("DocProf", meta.prof),
     def("DocDate", formatCoverDate(meta.date)),
     `\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfauthor={${author}},pdfcreator={Render Doc}}}`,
@@ -456,6 +482,8 @@ var BIBLATEX = [
   "\\DeclareDelimFormat{volnumdelim}{}",
   "\\DeclareFieldFormat{pages}{#1}",
   "\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}",
+  "% Two-thirds of a blank line between entries",
+  "\\setlength{\\bibitemsep}{.67\\baselineskip}",
   "\\defbibheading{rdreferences}[\\refname]{\\section*{\\centering #1}\\markboth{#1}{#1}}"
 ];
 var LINE_NUMBERS = [
@@ -1565,7 +1593,8 @@ var RenderExporter = class {
       stem,
       overwrite: false,
       lineNumbers: options.lineNumbers,
-      mode: options.mode
+      mode: options.mode,
+      openFolder: options.openFolder
     };
   }
   check(plan) {
@@ -1695,6 +1724,11 @@ var RenderModal = class extends import_obsidian2.Modal {
         plan.lineNumbers = v;
       })
     );
+    new import_obsidian2.Setting(contentEl).setName("Open export folder").setDesc("Show the new PDF in Finder when rendering finishes.").addToggle(
+      (t) => t.setValue(plan.openFolder).onChange((v) => {
+        plan.openFolder = v;
+      })
+    );
     this.renderSummary(contentEl.createDiv({ cls: "render-doc-summary" }));
     new import_obsidian2.Setting(contentEl).addButton((b) => {
       b.setButtonText("Render").setCta().onClick(() => {
@@ -1713,6 +1747,7 @@ var RenderModal = class extends import_obsidian2.Modal {
   }
   showMode() {
     this.titleEl.toggleClass("is-dev", this.plan.mode === "dev");
+    this.titleEl.toggleClass("is-submit", this.plan.mode === "submit");
   }
   refresh() {
     var _a;
@@ -1841,7 +1876,7 @@ var RenderDocPlugin = class extends import_obsidian4.Plugin {
     });
   }
   async saveSettings() {
-    await this.saveData(this.settings);
+    await this.saveData(settingsToSave(this.settings));
   }
   async pickFolder(current) {
     try {
@@ -1861,6 +1896,7 @@ var RenderDocPlugin = class extends import_obsidian4.Plugin {
       parentDir,
       lineNumbers: this.settings.lineNumbers,
       mode: this.settings.mode,
+      openFolder: this.settings.openFolder,
       defaultAuthor: this.settings.defaultAuthor
     });
     if (typeof plan === "string") {
@@ -1878,6 +1914,7 @@ var RenderDocPlugin = class extends import_obsidian4.Plugin {
     this.busy = true;
     this.settings.lineNumbers = plan.lineNumbers;
     this.settings.mode = plan.mode;
+    this.settings.openFolder = plan.openFolder;
     await this.saveSettings();
     const progress = new import_obsidian4.Notice("Render Doc: starting\u2026", 0);
     try {
@@ -1894,7 +1931,7 @@ Log: ${where}` : ""}`, ERROR_NOTICE_MS);
       const tail = unmatched > 0 ? `
 ${unmatched} citation${unmatched === 1 ? " is" : "s are"} highlighted as unmatched.` : "";
       new import_obsidian4.Notice(`Rendered to ${outcome.folder}${tail}`, 1e4);
-      revealInFinder(outcome.pdf);
+      if (plan.openFolder) revealInFinder(outcome.pdf);
     } catch (e) {
       progress.hide();
       new import_obsidian4.Notice(`Render Doc failed: ${e instanceof Error ? e.message : String(e)}`, ERROR_NOTICE_MS);

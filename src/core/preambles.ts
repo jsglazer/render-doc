@@ -4,14 +4,14 @@
 //
 // Both began as Josh's LatexPre.tex. Render Doc's meta.tex (included BEFORE
 // the preamble, see src/core/latex.ts) defines the per-note macros they use:
-//   \DocTitle  \DocShortTitle  \DocAuthor  \DocClass  \DocProf  \DocDate
+//   \DocTitle  \DocShortTitle  \DocAuthor  \DocClass  \DocClassNum  \DocProf  \DocDate
 // Each is \providecommand'ed here too, so the delivered .tex and a preamble
 // used on its own still compile.
 //
 // \maketitle is redefined as the cover page, modelled on an APA student title
 // page without its running head, "Full Title" line or due-date label: title,
-// author, then class, professor and date at the foot, each line skipped when
-// empty. The cover has no header or footer and is not counted, so the first
+// author, then class, class number, professor and date at the foot, each
+// line skipped when empty. The title wraps within the middle 56% of the page. The cover has no header or footer and is not counted, so the first
 // page of text is page 1 of N.
 
 const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.75in, includehead, includefoot, marginparwidth=.75in, marginparsep=.125in]{geometry}
@@ -32,12 +32,13 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
 
 % Per-note values, set by Render Doc's meta.tex from the note's frontmatter
-% (title, titleshort, author, class, prof, date). Empty when absent; the
+% (title, titleshort, author, class, coursenum, prof, date). Empty when absent; the
 % header title falls back to \jobname, the short title to the title.
 \providecommand{\DocTitle}{}
 \providecommand{\DocShortTitle}{}
 \providecommand{\DocAuthor}{}
 \providecommand{\DocClass}{}
+\providecommand{\DocClassNum}{}
 \providecommand{\DocProf}{}
 \providecommand{\DocDate}{}
 \newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
@@ -49,12 +50,12 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
   \pagenumbering{Alph}%
   \thispagestyle{empty}%
   \begin{center}
-    \vspace*{.25\textheight}
-    {\LARGE \HeaderTitle\par}
+    \vspace*{\dimexpr .25\textheight - 1in\relax}
+    \parbox{.56\textwidth}{\centering\LARGE \HeaderTitle\par}\par
     \vspace{.12\textheight}
     {\large \DocAuthor\par}
     \vfill
-    {\large \CoverLine{\DocClass}\CoverLine{\DocProf}\CoverLine{\DocDate}}
+    {\large \CoverLine{\DocClass}\CoverLine{\DocClassNum}\CoverLine{\DocProf}\CoverLine{\DocDate}}
   \end{center}
   \clearpage
   \pagenumbering{arabic}%
@@ -97,3 +98,18 @@ const SUBMIT_HEADER = String.raw`
 
 export const DEFAULT_DEV_PREAMBLE = `${COMMON}${DEV_HEADER}${TABLE_LINES}`;
 export const DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${SUBMIT_HEADER}${TABLE_LINES}`;
+
+// FNV-1a fingerprint, enough to recognise an unedited copy of an old default.
+export function preambleFingerprint(text: string): string {
+	let h = 0x811c9dc5;
+	for (let i = 0; i < text.length; i++) {
+		h ^= text.charCodeAt(i);
+		h = Math.imul(h, 0x01000193) >>> 0;
+	}
+	return h.toString(16).padStart(8, '0');
+}
+
+// Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit). A saved preamble that
+// matches one was never edited, so it follows the current default instead.
+// Add the old fingerprints here whenever a default changes.
+export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40']);

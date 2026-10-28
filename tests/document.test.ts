@@ -5,8 +5,8 @@ import { extractBody } from '../src/core/exportBody';
 import { autociteCommand, citeHeader, latexEscape, metaHeader, unmatchedCommand } from '../src/core/latex';
 import type { ExportResolver } from '../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../src/core/render';
-import { DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE } from '../src/core/preambles';
-import { initialParentDir, mergeSettings, preambleFor } from '../src/core/settings';
+import { DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE, preambleFingerprint, RETIRED_DEFAULT_FINGERPRINTS } from '../src/core/preambles';
+import { initialParentDir, mergeSettings, preambleFor, settingsToSave } from '../src/core/settings';
 import type { CitationEntry } from '../src/core/sources';
 
 describe('readDocMeta', () => {
@@ -22,10 +22,12 @@ describe('readDocMeta', () => {
 	});
 	it('reads titleshort, class and prof, with the short title falling back to the title', () => {
 		const m = readDocMeta({ title: 'Long Title', titleshort: 'Short', class: 'POLS 501', prof: 'Dr. Smith' }, 'n');
-		expect(m).toMatchObject({ title: 'Long Title', shortTitle: 'Short', className: 'POLS 501', prof: 'Dr. Smith', date: null });
+		expect(m).toMatchObject({ title: 'Long Title', shortTitle: 'Short', className: 'POLS 501', classNum: null, prof: 'Dr. Smith', date: null });
+		expect(readDocMeta({ course: 'Methods', coursenum: '(POGO-801)' }, 'n')).toMatchObject({ className: 'Methods', classNum: '(POGO-801)' });
+		expect(readDocMeta({ class: 'Methods', classnum: '(POGO-801-001)' }, 'n').classNum).toBe('(POGO-801-001)');
 		expect(readDocMeta({ title: 'Long Title' }, 'n').shortTitle).toBe('Long Title');
 	});
-	it('formats the cover date like "Monday, January 1st, 2020", skipping a blank one', () => {
+	it('formats the cover date like "Monday, January 1st, 2020", using today for a blank one', () => {
 		expect(formatCoverDate('2020-01-01')).toBe('Wednesday, January 1st, 2020');
 		expect(formatCoverDate('2026-10-28')).toBe('Wednesday, October 28th, 2026');
 		expect(formatCoverDate('2026-03-22T10:00')).toBe('Sunday, March 22nd, 2026');
@@ -33,7 +35,7 @@ describe('readDocMeta', () => {
 		expect(formatCoverDate('2026-03-11')).toBe('Wednesday, March 11th, 2026');
 		expect(formatCoverDate('Fall 2026')).toBe('Fall 2026');
 		expect(formatCoverDate('2026-02-30')).toBe('2026-02-30');
-		expect(formatCoverDate(null)).toBeNull();
+		expect(formatCoverDate(null, new Date(2026, 9, 28))).toBe('Wednesday, October 28th, 2026');
 	});
 	it('passes author and date only when present', () => {
 		expect(pandocMetadata(readDocMeta({}, 'n'))).toEqual({ title: 'n' });
@@ -88,6 +90,16 @@ describe('settings', () => {
 		expect(preambleFor(s, 'submit')).toBe(DEFAULT_SUBMIT_PREAMBLE);
 		expect(mergeSettings({ devPreamble: '  ' }).devPreamble).toBe(DEFAULT_DEV_PREAMBLE);
 		expect(mergeSettings({ submitPreamble: '% mine' }).submitPreamble).toBe('% mine');
+		expect(s.openFolder).toBe(false);
+		expect(mergeSettings({ openFolder: true }).openFolder).toBe(true);
+	});
+	it('saves default preambles empty, and treats a saved old default as the current one', () => {
+		const saved = settingsToSave(mergeSettings({ submitPreamble: '% mine' }));
+		expect(saved.devPreamble).toBe('');
+		expect(saved.submitPreamble).toBe('% mine');
+		expect(mergeSettings(saved).devPreamble).toBe(DEFAULT_DEV_PREAMBLE);
+		expect(RETIRED_DEFAULT_FINGERPRINTS.has(preambleFingerprint(DEFAULT_DEV_PREAMBLE))).toBe(false);
+		expect(RETIRED_DEFAULT_FINGERPRINTS.has(preambleFingerprint(DEFAULT_SUBMIT_PREAMBLE))).toBe(false);
 	});
 });
 
@@ -106,7 +118,7 @@ describe('preambles', () => {
 	it('both draw the cover page from \\maketitle', () => {
 		for (const p of [DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE]) {
 			expect(p).toContain('\\renewcommand{\\maketitle}');
-			expect(p).toContain('\\CoverLine{\\DocClass}\\CoverLine{\\DocProf}\\CoverLine{\\DocDate}');
+			expect(p).toContain('\\CoverLine{\\DocClass}\\CoverLine{\\DocClassNum}\\CoverLine{\\DocProf}\\CoverLine{\\DocDate}');
 			expect(p).not.toContain('Joshua S. Glazer');
 		}
 	});
@@ -140,6 +152,7 @@ describe('latex', () => {
 		expect(citeHeader(false, true)).not.toContain('lineno');
 	});
 	it('puts References on its own page under a centred heading', () => {
+		expect(citeHeader(true)).toContain('\\setlength{\\bibitemsep}{.67\\baselineskip}');
 		expect(citeHeader(true)).toContain('\\defbibheading{rdreferences}[\\refname]{\\section*{\\centering #1}');
 	});
 	it('sets the per-note macros escaped, the date formatted', () => {
@@ -149,6 +162,7 @@ describe('latex', () => {
 		expect(tex).toContain('\\def\\DocAuthor{Me}');
 		expect(tex).toContain('\\def\\DocClass{POLS \\& Co}');
 		expect(tex).toContain('\\def\\DocProf{}');
+		expect(tex).toContain('\\def\\DocClassNum{}');
 		expect(tex).toContain('\\def\\DocDate{Wednesday, January 1st, 2020}');
 	});
 });

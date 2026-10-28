@@ -5,7 +5,7 @@
 // citations left highlighted, with every warning. A Dev/Submit selector and a
 // line-numbers toggle, both remembered between renders. No font size.
 //
-// The title is red; in Dev mode it also sits on a red bar (Update000), so a
+// The title sits in an alert box: yellow for Dev, red for Submit, so a
 // working draft is hard to mistake for the copy being handed in.
 
 import type { App } from 'obsidian';
@@ -96,6 +96,15 @@ export class RenderModal extends Modal {
 				}),
 			);
 
+		new Setting(contentEl)
+			.setName('Open export folder')
+			.setDesc('Show the new PDF in Finder when rendering finishes.')
+			.addToggle((t) =>
+				t.setValue(plan.openFolder).onChange((v) => {
+					plan.openFolder = v;
+				}),
+			);
+
 		this.renderSummary(contentEl.createDiv({ cls: 'render-doc-summary' }));
 
 		new Setting(contentEl)
@@ -122,6 +131,7 @@ export class RenderModal extends Modal {
 
 	private showMode(): void {
 		this.titleEl.toggleClass('is-dev', this.plan.mode === 'dev');
+		this.titleEl.toggleClass('is-submit', this.plan.mode === 'submit');
 	}
 
 	private refresh(): void {

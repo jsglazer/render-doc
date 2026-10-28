@@ -1,14 +1,18 @@
 /* Render Doc — the pre-export dialog and the settings page. */
+/* The title in an alert box: yellow for Dev, red for Submit. */
 .render-doc-title {
-	color: var(--color-red);
-}
-
-/* Dev renders: the red title sits on a red bar. */
-.render-doc-title.is-dev {
-	background-color: rgba(var(--color-red-rgb), 0.18);
-	border-left: 4px solid var(--color-red);
+	--render-doc-alert: var(--color-red);
+	--render-doc-alert-rgb: var(--color-red-rgb);
+	color: var(--render-doc-alert);
+	background-color: rgba(var(--render-doc-alert-rgb), 0.18);
+	border-left: 4px solid var(--render-doc-alert);
 	border-radius: var(--radius-s);
 	padding: var(--size-4-1) var(--size-4-2);
+}
+
+.render-doc-title.is-dev {
+	--render-doc-alert: var(--color-yellow);
+	--render-doc-alert-rgb: var(--color-yellow-rgb);
 }
 
 .render-doc-preamble textarea {

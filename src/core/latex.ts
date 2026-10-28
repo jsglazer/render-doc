@@ -63,6 +63,7 @@ export function metaHeader(meta: DocMeta): string {
 		def('DocShortTitle', meta.shortTitle),
 		`\\def\\DocAuthor{${author}}`,
 		def('DocClass', meta.className),
+		def('DocClassNum', meta.classNum),
 		def('DocProf', meta.prof),
 		def('DocDate', formatCoverDate(meta.date)),
 		`\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfauthor={${author}},pdfcreator={Render Doc}}}`,
@@ -103,6 +104,8 @@ const BIBLATEX = [
 	'\\DeclareDelimFormat{volnumdelim}{}',
 	'\\DeclareFieldFormat{pages}{#1}',
 	'\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}',
+	'% Two-thirds of a blank line between entries',
+	'\\setlength{\\bibitemsep}{.67\\baselineskip}',
 	'\\defbibheading{rdreferences}[\\refname]{\\section*{\\centering #1}\\markboth{#1}{#1}}',
 ];
 
