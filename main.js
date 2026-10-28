@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => RenderDocPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/adapter/obsidianInternals.ts
 function zoteroManagerApi(app) {
@@ -65,22 +65,124 @@ function revealInFinder(path) {
   return true;
 }
 
+// src/core/preambles.ts
+var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.75in, includehead, includefoot, marginparwidth=.75in, marginparsep=.125in]{geometry}
+\setlength{\parskip}{.15in}
+\usepackage{enumitem}
+\setlist{itemsep=2pt, parsep=0pt, topsep=4pt}
+\usepackage{hyperref}
+
+\RequirePackage{datetime}
+\settimeformat{ampmtime}
+\newdateformat{dashdate}{\THEYEAR-\twodigit{\THEMONTH}-\twodigit{\THEDAY}}
+\newtimeformat{dottime}{\twodigit{\THEHOUR}:\twodigit{\THEMINUTE}:\twodigit{\THESECOND}}
+
+\RequirePackage{lastpage}    %% Required for pages of page number
+\RequirePackage{fancyhdr}   %must come after geometry
+\RequirePackage{etoolbox}
+\pagestyle{fancy}
+\renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
+
+% Per-note values, set by Render Doc's meta.tex from the note's frontmatter
+% (title, titleshort, author, class, prof, date). Empty when absent; the
+% header title falls back to \jobname, the short title to the title.
+\providecommand{\DocTitle}{}
+\providecommand{\DocShortTitle}{}
+\providecommand{\DocAuthor}{}
+\providecommand{\DocClass}{}
+\providecommand{\DocProf}{}
+\providecommand{\DocDate}{}
+\newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
+\newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderTitle}{\DocShortTitle}}
+
+% Cover page (pandoc calls \maketitle at the start of the document).
+\newcommand{\CoverLine}[1]{\ifdefempty{#1}{}{#1\par\medskip}}
+\renewcommand{\maketitle}{%
+  \pagenumbering{Alph}%
+  \thispagestyle{empty}%
+  \begin{center}
+    \vspace*{.25\textheight}
+    {\LARGE \HeaderTitle\par}
+    \vspace{.12\textheight}
+    {\large \DocAuthor\par}
+    \vfill
+    {\large \CoverLine{\DocClass}\CoverLine{\DocProf}\CoverLine{\DocDate}}
+  \end{center}
+  \clearpage
+  \pagenumbering{arabic}%
+}
+`;
+var TABLE_LINES = String.raw`
+% Light grey rule between table rows. Just the color setup lives here — the
+% actual \hline-per-row is inserted into the generated .tex body by the
+% renderer's rowlines.py, since longtable's internal row-end machinery
+% actively resists doing this via a preamble hook.
+\usepackage{colortbl}
+\definecolor{rowline}{gray}{0.75}
+% Extra row height so the rules clear accents (hats, bars) on symbols.
+\renewcommand{\arraystretch}{1.3}
+`;
+var DEV_HEADER = String.raw`
+% Dev: title and author in the header; page x of y and a date/time stamp in the footer.
+\fancyhead{} % clear all header fields
+\fancyhead[L]{\small{\textbf{\HeaderTitle}}}
+\fancyhead[R]{\small{\DocAuthor}}
+\fancyfoot{}
+\fancyfoot[L]{\scriptsize{\thepage\ of \pageref{LastPage}}}
+\fancyfoot[R]{\scriptsize{\dashdate{\today} at \dottime}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+`;
+var SUBMIT_HEADER = String.raw`
+% Submit: short title (bold) and author in the header; page x of y centred; no date/time stamp.
+\fancyhead{} % clear all header fields
+\fancyhead[L]{\small{\textbf{\HeaderShortTitle}}}
+\fancyhead[R]{\small{\DocAuthor}}
+\fancyfoot{}
+\fancyfoot[C]{\scriptsize{\thepage\ of \pageref{LastPage}}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+`;
+var DEFAULT_DEV_PREAMBLE = `${COMMON}${DEV_HEADER}${TABLE_LINES}`;
+var DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${SUBMIT_HEADER}${TABLE_LINES}`;
+
 // src/core/settings.ts
+var DEFAULT_PARENT_DIR = "~/Library/CloudStorage/Dropbox/_Schar/Classes";
 var DEFAULT_SETTINGS = {
-  lastParentDir: "",
-  lineNumbers: false
+  defaultAuthor: "Joshua S. Glazer",
+  defaultParentDir: DEFAULT_PARENT_DIR,
+  devPreamble: DEFAULT_DEV_PREAMBLE,
+  submitPreamble: DEFAULT_SUBMIT_PREAMBLE,
+  lineNumbers: false,
+  mode: "dev"
 };
-var DEFAULT_PARENT_DIR_HOME = "Library/CloudStorage/Dropbox/_Schar/Classes";
-var PREAMBLE_PATH_HOME = "Library/CloudStorage/Dropbox/SysAdmin/config/Files/LatexPre.tex";
+function text(value, fallback) {
+  return typeof value === "string" ? value : fallback;
+}
+function preamble(value, fallback) {
+  return typeof value === "string" && value.trim() !== "" ? value : fallback;
+}
 function mergeSettings(saved) {
   const s = saved !== null && typeof saved === "object" ? saved : {};
   return {
-    lastParentDir: typeof s.lastParentDir === "string" ? s.lastParentDir : DEFAULT_SETTINGS.lastParentDir,
-    lineNumbers: typeof s.lineNumbers === "boolean" ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers
+    defaultAuthor: text(s.defaultAuthor, DEFAULT_SETTINGS.defaultAuthor),
+    defaultParentDir: text(s.defaultParentDir, DEFAULT_SETTINGS.defaultParentDir),
+    devPreamble: preamble(s.devPreamble, DEFAULT_SETTINGS.devPreamble),
+    submitPreamble: preamble(s.submitPreamble, DEFAULT_SETTINGS.submitPreamble),
+    lineNumbers: typeof s.lineNumbers === "boolean" ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
+    mode: s.mode === "submit" ? "submit" : "dev"
   };
 }
+function expandHome(dir, home) {
+  const d = dir.trim();
+  if (d === "~") return home.replace(/\/+$/, "");
+  return d.startsWith("~/") ? `${home.replace(/\/+$/, "")}/${d.slice(2)}` : d;
+}
 function initialParentDir(settings, home) {
-  return settings.lastParentDir !== "" ? settings.lastParentDir : `${home.replace(/\/+$/, "")}/${DEFAULT_PARENT_DIR_HOME}`;
+  return expandHome(settings.defaultParentDir.trim() !== "" ? settings.defaultParentDir : DEFAULT_PARENT_DIR, home);
+}
+function preambleFor(settings, mode) {
+  return mode === "submit" ? settings.submitPreamble : settings.devPreamble;
 }
 
 // src/export/exporter.ts
@@ -92,16 +194,39 @@ function asText(value) {
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return null;
 }
-function readDocMeta(frontmatter, basename) {
-  var _a;
+function readDocMeta(frontmatter, basename, defaultAuthor = "") {
+  var _a, _b;
   const fm = frontmatter != null ? frontmatter : {};
   const rawAuthor = fm.author;
-  const authors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a) => a !== null);
+  const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a) => a !== null);
+  const fallback = asText(defaultAuthor);
+  const title = (_a = asText(fm.title)) != null ? _a : basename;
   return {
-    title: (_a = asText(fm.title)) != null ? _a : basename,
-    authors,
+    title,
+    shortTitle: (_b = asText(fm.titleshort)) != null ? _b : title,
+    authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
+    className: asText(fm.class),
+    prof: asText(fm.prof),
     date: asText(fm.date)
   };
+}
+var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function ordinal(n) {
+  var _a;
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${(_a = ["th", "st", "nd", "rd"][n % 10]) != null ? _a : "th"}`;
+}
+function formatCoverDate(raw) {
+  var _a, _b;
+  if (raw === null) return null;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/.exec(raw.trim());
+  if (!m) return raw;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return raw;
+  return `${(_a = WEEKDAYS[d.getUTCDay()]) != null ? _a : ""}, ${(_b = MONTHS[month - 1]) != null ? _b : ""} ${ordinal(day)}, ${year}`;
 }
 function pandocMetadata(meta) {
   const out = { title: meta.title };
@@ -264,9 +389,9 @@ function separateBlocks(markdown) {
 }
 
 // src/core/latex.ts
-function latexEscape(text) {
+function latexEscape(text2) {
   let out = "";
-  for (const ch of text) {
+  for (const ch of text2) {
     if (ch === "\\") out += "\\textbackslash{}";
     else if ("&%$#_{}".includes(ch)) out += `\\${ch}`;
     else if (ch === "~") out += "\\textasciitilde{}";
@@ -276,8 +401,8 @@ function latexEscape(text) {
   }
   return out;
 }
-function latexOptionalArg(text) {
-  return latexEscape(text).replace(/\[/g, "{[}").replace(/\]/g, "{]}");
+function latexOptionalArg(text2) {
+  return latexEscape(text2).replace(/\[/g, "{[}").replace(/\]/g, "{]}");
 }
 function rawLatex(latex) {
   return `\`${latex}\`{=latex}`;
@@ -285,16 +410,23 @@ function rawLatex(latex) {
 function autociteCommand(citekey, locator) {
   return locator === "" ? `\\autocite{${citekey}}` : `\\autocite[${latexOptionalArg(locator)}]{${citekey}}`;
 }
-function unmatchedCommand(text) {
-  return `\\rdunmatched{${latexEscape(text)}}`;
+function unmatchedCommand(text2) {
+  return `\\rdunmatched{${latexEscape(text2)}}`;
 }
-function metaHeader(title) {
-  const t = latexEscape(title);
+function metaHeader(meta) {
+  const t = latexEscape(meta.title);
+  const author = latexEscape(meta.authors.join(", "));
+  const def = (name, value) => `\\def\\${name}{${value === null ? "" : latexEscape(value)}}`;
   return [
-    "% Written by Render Doc \u2014 included BEFORE LatexPre.tex, so its",
-    "% \\providecommand{\\DocTitle}{} default leaves this title alone.",
+    "% Written by Render Doc \u2014 included BEFORE the preamble, so its",
+    "% \\providecommand defaults leave these alone.",
     `\\def\\DocTitle{${t}}`,
-    `\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfcreator={Render Doc}}}`,
+    def("DocShortTitle", meta.shortTitle),
+    `\\def\\DocAuthor{${author}}`,
+    def("DocClass", meta.className),
+    def("DocProf", meta.prof),
+    def("DocDate", formatCoverDate(meta.date)),
+    `\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfauthor={${author}},pdfcreator={Render Doc}}}`,
     ""
   ].join("\n");
 }
@@ -323,22 +455,34 @@ var BIBLATEX = [
   "\\DeclareFieldFormat[article]{number}{\\mkbibparens{#1}}",
   "\\DeclareDelimFormat{volnumdelim}{}",
   "\\DeclareFieldFormat{pages}{#1}",
-  "\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}"
+  "\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}",
+  "\\defbibheading{rdreferences}[\\refname]{\\section*{\\centering #1}\\markboth{#1}{#1}}"
 ];
-var LINE_NUMBERS = ["\\usepackage{lineno}", "\\linenumbers"];
+var LINE_NUMBERS = [
+  "\\usepackage{marginnote}",
+  "\\reversemarginpar",
+  "\\makeatletter",
+  "\\DeclareRobustCommand{\\rdln}[1]{\\leavevmode\\marginnote{\\hfill\\normalfont\\scriptsize\\color{gray}#1}}",
+  "\\let\\rd@markright\\markright",
+  "\\renewcommand*{\\markright}[1]{{\\let\\rdln\\@gobble\\rd@markright{#1}}}",
+  "\\let\\rd@markboth\\markboth",
+  "\\renewcommand*{\\markboth}[2]{{\\let\\rdln\\@gobble\\rd@markboth{#1}{#2}}}",
+  "\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdln\\@gobble}\\fi",
+  "\\makeatother"
+];
 function citeHeader(withBibliography, lineNumbers = false) {
-  const lines = ["% Written by Render Doc \u2014 included AFTER LatexPre.tex.", ...UNMATCHED_MACRO];
+  const lines = ["% Written by Render Doc \u2014 included AFTER the preamble.", ...UNMATCHED_MACRO];
   if (withBibliography) lines.push(...BIBLATEX);
   if (lineNumbers) lines.push(...LINE_NUMBERS);
   return `${lines.join("\n")}
 `;
 }
-var BIBLIOGRAPHY_TRAILER = "\\printbibliography[title={References}]\n";
+var BIBLIOGRAPHY_TRAILER = "\\clearpage\n\\printbibliography[heading=rdreferences, title={References}]\n";
 
 // src/core/sources.ts
 var CITE_SOURCES_KEY = "cite-sources";
-function normalizeCiteshort(text) {
-  return text.normalize("NFC").trim().replace(/\s+/g, " ");
+function normalizeCiteshort(text2) {
+  return text2.normalize("NFC").trim().replace(/\s+/g, " ");
 }
 function parentFolder(path) {
   const slash = path.lastIndexOf("/");
@@ -532,6 +676,79 @@ function replaceCitations(markdown, index) {
     out.push(split.segments.map((s) => s.scan ? s.text.replace(PARENTHETICAL_RE, rewrite) : s.text).join(""));
   }
   return { markdown: out.join("\n"), resolved, unmatched, citekeys };
+}
+
+// src/core/lineMarkers.ts
+var OPEN = "\uE000";
+var CLOSE = "\uE001";
+var MARKER_RE = new RegExp(`${OPEN}(\\d+)${CLOSE}`, "g");
+var PREFIX_RE = /^(#{1,6}[ \t]+|(?:[ \t]*>[ \t]?)*(?:[ \t]*(?:[-*+]|\d+[.)])[ \t]+(?:\[.\][ \t]+)?)?)/;
+var SKIP_RE = /^(?:\||!\[|\$\$|%%|<|\[\^|:::|\[!)/;
+var THEMATIC_RE = /^\s*(?:[-*_=]\s*){3,}$/;
+var INDENTED_CODE_RE = /^(?: {4}|\t)/;
+var LIST_ITEM_RE = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/;
+function escapeForRegex2(char) {
+  return char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function markSourceLines(doc, sigilChar) {
+  var _a, _b;
+  const lines = doc.split("\n");
+  let start = 0;
+  if (((_a = lines[0]) != null ? _a : "").trimEnd() === "---") {
+    for (let i = 1; i < lines.length; i++) {
+      const t = ((_b = lines[i]) != null ? _b : "").trimEnd();
+      if (t === "---" || t === "...") {
+        start = i + 1;
+        break;
+      }
+    }
+  }
+  const sigilRe = new RegExp(`^${escapeForRegex2(sigilChar)}`);
+  let fence = null;
+  let math = false;
+  return lines.map((line, i) => {
+    var _a2, _b2;
+    if (i < start) return line;
+    const fenceAfter = nextFenceState(line, fence);
+    if (fence !== null || fenceAfter !== null) {
+      fence = fenceAfter;
+      return line;
+    }
+    if (line.trim().startsWith("$$")) {
+      if (line.trim() === "$$" || !line.trim().slice(2).includes("$$")) math = !math;
+      return line;
+    }
+    if (math || line.trim() === "" || sigilRe.test(line) || THEMATIC_RE.test(line)) return line;
+    if (INDENTED_CODE_RE.test(line) && !LIST_ITEM_RE.test(line)) return line;
+    const prefix = (_b2 = (_a2 = PREFIX_RE.exec(line)) == null ? void 0 : _a2[0]) != null ? _b2 : "";
+    const rest = line.slice(prefix.length);
+    if (rest.trim() === "" || SKIP_RE.test(rest)) return line;
+    return `${prefix}${OPEN}${i + 1}${CLOSE}${rest}`;
+  }).join("\n");
+}
+var BLOCK_OPENER_RE = /^(?:#{1,6}[ \t]|[ \t]*(?:[-*+]|\d+[.)])[ \t])/;
+function quoteContent(line) {
+  return line.replace(/^(?:[ \t]*>[ \t]?)+/, "");
+}
+function markersToLatex(markdown) {
+  const lines = markdown.split("\n");
+  return lines.map((line, i) => {
+    var _a;
+    if (!line.includes(OPEN)) return line;
+    const prev = i > 0 ? (_a = lines[i - 1]) != null ? _a : "" : "";
+    const content = quoteContent(line);
+    const prevContent = /^[ \t]*>/.test(line) === /^[ \t]*>/.test(prev) ? quoteContent(prev) : "";
+    const continues = prevContent.trim() !== "" && !BLOCK_OPENER_RE.test(content) && !/^#{1,6}[ \t]/.test(prevContent);
+    let first = !continues;
+    return line.replace(MARKER_RE, (_m, n) => {
+      if (!first) return "";
+      first = false;
+      return rawLatex(`\\rdln{${n}}`);
+    });
+  }).join("\n");
+}
+function stripMarkers(text2) {
+  return text2.replace(MARKER_RE, "");
 }
 
 // src/core/obsidianMarkdown.ts
@@ -772,11 +989,12 @@ function collapseBlankRuns(markdown) {
 
 // src/core/render.ts
 async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
-  const extraction = extractBody(doc, sigilChar);
+  const extraction = extractBody(markSourceLines(doc, sigilChar), sigilChar);
   const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
   const citations = replaceCitations(separateBlocks(converted.markdown), index);
   return {
-    markdown: citations.markdown,
+    markdown: stripMarkers(citations.markdown),
+    numberedMarkdown: markersToLatex(citations.markdown),
     citations,
     issues: converted.issues,
     outlineLinesStripped: extraction.outlineLinesStripped,
@@ -789,9 +1007,9 @@ function buildFiles(prepared, meta, target, options = {}) {
   var _a;
   const cites = prepared.citations.citekeys.length > 0;
   const files = {
-    "source.md": `${prepared.markdown}
+    "source.md": `${options.lineNumbers === true ? prepared.numberedMarkdown : prepared.markdown}
 `,
-    "meta.tex": metaHeader(meta.title),
+    "meta.tex": metaHeader(meta),
     "cite.tex": citeHeader(cites, (_a = options.lineNumbers) != null ? _a : false),
     "meta.json": `${JSON.stringify(pandocMetadata(meta), null, 2)}
 `
@@ -1287,28 +1505,18 @@ function runRenderer(script, jobPath, cwd) {
   });
 }
 
-// src/export/staging.ts
-async function stageByStream(source, destination) {
-  const { fs, stream } = node();
-  await stream.pipeline(fs.createReadStream(source), fs.createWriteStream(destination));
-}
-
 // src/export/exporter.ts
 var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set(["png", "jpg", "jpeg", "gif", "webp", "tif", "tiff", "bmp", "svg", "heic", "avif", "pdf"]);
 function vaultBasePath(app) {
   const adapter = app.vault.adapter;
   return adapter instanceof import_obsidian.FileSystemAdapter ? adapter.getBasePath() : null;
 }
-function preamblePath() {
-  const { path, os } = node();
-  return path.join(os.homedir(), PREAMBLE_PATH_HOME);
-}
 var RenderExporter = class {
   constructor(app, pluginVersion) {
     this.app = app;
     this.pluginVersion = pluginVersion;
   }
-  async plan(file, parentDir, lineNumbers) {
+  async plan(file, options) {
     var _a, _b, _c;
     const { app } = this;
     const base = vaultBasePath(app);
@@ -1347,23 +1555,25 @@ var RenderExporter = class {
     const stem = safeStem(file.basename);
     return {
       file,
-      meta: readDocMeta(frontmatter, file.basename),
+      meta: readDocMeta(frontmatter, file.basename, options.defaultAuthor),
       discovery,
       prepared,
       stagedImages,
       noteDir: path.join(base, (_c = (_b = file.parent) == null ? void 0 : _b.path) != null ? _c : ""),
-      parentDir,
+      parentDir: options.parentDir,
       folderName: stem,
       stem,
       overwrite: false,
-      lineNumbers
+      lineNumbers: options.lineNumbers,
+      mode: options.mode
     };
   }
   check(plan) {
     const { fs } = node();
     return checkExportTarget(plan.parentDir, plan.folderName, (p) => fs.existsSync(p));
   }
-  async run(plan, progress) {
+  // `preamble` is the text of the Dev or Submit preamble, per plan.mode.
+  async run(plan, preamble2, progress) {
     var _a;
     const { fs, path, crypto } = node();
     const fail = (stage, message, buildDir2 = null) => ({
@@ -1379,8 +1589,7 @@ var RenderExporter = class {
     if (missing.length > 0) {
       return fail("tools", `Missing ${missing.join(", ")}. Render Doc needs pandoc, MacTeX (latexmk, lualatex, biber) and python3.`);
     }
-    const preamble = preamblePath();
-    if (!fs.existsSync(preamble)) return fail("preamble", `The LaTeX preamble was not found: ${preamble}`);
+    if (preamble2.trim() === "") return fail("preamble", `The ${plan.mode === "submit" ? "Submit" : "Dev"} preamble in Render Doc's settings is empty.`);
     const target = this.check(plan);
     if (!target.ok) return fail("folder", target.message);
     if (target.exists && !plan.overwrite) {
@@ -1417,11 +1626,8 @@ var RenderExporter = class {
     for (const [name, content] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(buildDir, name), content, "utf8");
     }
-    try {
-      await stageByStream(preamble, path.join(buildDir, PREAMBLE_FILE));
-    } catch (e) {
-      return fail("preamble", `Could not read the LaTeX preamble (${preamble}): ${e instanceof Error ? e.message : String(e)}`, buildDir);
-    }
+    await fs.promises.writeFile(path.join(buildDir, PREAMBLE_FILE), preamble2.endsWith("\n") ? preamble2 : `${preamble2}
+`, "utf8");
     if (job.bibliography !== "") await fs.promises.writeFile(path.join(buildDir, BIB_FILE), bib, "utf8");
     const jobPath = path.join(buildDir, "job.json");
     await fs.promises.writeFile(jobPath, `${JSON.stringify(job, null, 2)}
@@ -1451,14 +1657,22 @@ var RenderModal = class extends import_obsidian2.Modal {
   onOpen() {
     const { contentEl, plan } = this;
     this.setTitle(`Render "${plan.file.basename}"`);
+    this.titleEl.addClass("render-doc-title");
+    this.showMode();
     contentEl.addClass("render-doc-modal");
-    new import_obsidian2.Setting(contentEl).setName("Parent folder").setDesc("The export folder is created inside this folder.").addText((text) => {
-      text.setValue(plan.parentDir).onChange((v) => {
+    new import_obsidian2.Setting(contentEl).setName("Version").setDesc("Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp.").addDropdown(
+      (d) => d.addOption("dev", "Dev").addOption("submit", "Submit").setValue(plan.mode).onChange((v) => {
+        plan.mode = v;
+        this.showMode();
+      })
+    );
+    new import_obsidian2.Setting(contentEl).setName("Parent folder").setDesc("The export folder is created inside this folder.").addText((text2) => {
+      text2.setValue(plan.parentDir).onChange((v) => {
         plan.parentDir = v.trim();
         this.refresh();
       });
-      text.inputEl.addClass("render-doc-path");
-      this.parentText = text;
+      text2.inputEl.addClass("render-doc-path");
+      this.parentText = text2;
     }).addButton(
       (b) => b.setButtonText("Choose\u2026").onClick(async () => {
         var _a;
@@ -1470,7 +1684,7 @@ var RenderModal = class extends import_obsidian2.Modal {
       })
     );
     new import_obsidian2.Setting(contentEl).setName("Folder name").setDesc("The folder holding the PDF, the .tex file, refs.bib and images. If it already exists, those files in it are overwritten.").addText(
-      (text) => text.setValue(plan.folderName).onChange((v) => {
+      (text2) => text2.setValue(plan.folderName).onChange((v) => {
         plan.folderName = v;
         this.refresh();
       })
@@ -1496,6 +1710,9 @@ var RenderModal = class extends import_obsidian2.Modal {
   }
   onClose() {
     this.contentEl.empty();
+  }
+  showMode() {
+    this.titleEl.toggleClass("is-dev", this.plan.mode === "dev");
   }
   refresh() {
     var _a;
@@ -1533,9 +1750,72 @@ var RenderModal = class extends import_obsidian2.Modal {
   }
 };
 
+// src/ui/settingsTab.ts
+var import_obsidian3 = require("obsidian");
+var RenderDocSettingTab = class extends import_obsidian3.PluginSettingTab {
+  constructor(app, host) {
+    super(app, host);
+    this.host = host;
+  }
+  display() {
+    const { containerEl, host } = this;
+    containerEl.empty();
+    new import_obsidian3.Setting(containerEl).setName("Default author").setDesc("Shown on the cover page and in the header. A note with an author: field uses that instead.").addText(
+      (t) => t.setValue(host.settings.defaultAuthor).onChange(async (v) => {
+        host.settings.defaultAuthor = v;
+        await host.saveSettings();
+      })
+    );
+    let parentText = null;
+    new import_obsidian3.Setting(containerEl).setName("Default parent folder").setDesc("The render dialog opens on this folder. ~ means your home folder.").addText((t) => {
+      t.setValue(host.settings.defaultParentDir).onChange(async (v) => {
+        host.settings.defaultParentDir = v.trim();
+        await host.saveSettings();
+      });
+      t.inputEl.addClass("render-doc-path");
+      parentText = t;
+    }).addButton(
+      (b) => b.setButtonText("Choose\u2026").onClick(async () => {
+        const picked = await host.pickFolder(host.settings.defaultParentDir);
+        if (picked === null) return;
+        host.settings.defaultParentDir = picked;
+        parentText == null ? void 0 : parentText.setValue(picked);
+        await host.saveSettings();
+      })
+    );
+    new import_obsidian3.Setting(containerEl).setName("LaTeX preambles").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "Included in every render after Render Doc defines \\DocTitle, \\DocShortTitle, \\DocAuthor, \\DocClass, \\DocProf and \\DocDate from the note. \\maketitle draws the cover page. Clearing a box restores its default."
+    });
+    this.preambleSetting("Dev preamble", "Used for Dev renders: title and author header, page x of y bottom left, date/time stamp bottom right.", "devPreamble");
+    this.preambleSetting("Submit preamble", "Used for Submit renders: short title (bold) and author header, page x of y centred, no date/time stamp.", "submitPreamble");
+  }
+  preambleSetting(name, desc, key) {
+    const { containerEl, host } = this;
+    let area = null;
+    new import_obsidian3.Setting(containerEl).setName(name).setDesc(desc).addButton(
+      (b) => b.setButtonText("Reset to default").onClick(async () => {
+        host.settings[key] = DEFAULT_SETTINGS[key];
+        area == null ? void 0 : area.setValue(DEFAULT_SETTINGS[key]);
+        await host.saveSettings();
+      })
+    );
+    new import_obsidian3.Setting(containerEl).setClass("render-doc-preamble").addTextArea((t) => {
+      t.setValue(host.settings[key]).onChange(async (v) => {
+        host.settings[key] = v.trim() === "" ? DEFAULT_SETTINGS[key] : v;
+        await host.saveSettings();
+      });
+      t.inputEl.rows = 18;
+      t.inputEl.spellcheck = false;
+      area = t;
+    });
+  }
+};
+
 // src/main.ts
 var ERROR_NOTICE_MS = 2e4;
-var RenderDocPlugin = class extends import_obsidian3.Plugin {
+var RenderDocPlugin = class extends import_obsidian4.Plugin {
   constructor() {
     super(...arguments);
     this.settings = mergeSettings(null);
@@ -1544,12 +1824,13 @@ var RenderDocPlugin = class extends import_obsidian3.Plugin {
   async onload() {
     this.settings = mergeSettings(await this.loadData());
     this.exporter = new RenderExporter(this.app, this.manifest.version);
+    this.addSettingTab(new RenderDocSettingTab(this.app, this));
     this.addCommand({
       id: "render-current-note",
       name: "Render current note",
       checkCallback: (checking) => {
         var _a, _b;
-        const file = (_b = (_a = this.app.workspace.getActiveViewOfType(import_obsidian3.MarkdownView)) == null ? void 0 : _a.file) != null ? _b : null;
+        const file = (_b = (_a = this.app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView)) == null ? void 0 : _a.file) != null ? _b : null;
         if (!file || file.extension !== "md") return false;
         if (!checking) void this.openDialog(file);
         return true;
@@ -1559,43 +1840,52 @@ var RenderDocPlugin = class extends import_obsidian3.Plugin {
       void pruneBuildDirs().catch(() => void 0);
     });
   }
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
+  async pickFolder(current) {
+    try {
+      return await pickFolder("Choose the parent folder", expandHome(current, node().os.homedir()));
+    } catch (e) {
+      new import_obsidian4.Notice(e instanceof Error ? e.message : String(e));
+      return null;
+    }
+  }
   async openDialog(file) {
     if (this.busy) {
-      new import_obsidian3.Notice("Render Doc is already rendering a note.");
+      new import_obsidian4.Notice("Render Doc is already rendering a note.");
       return;
     }
     const parentDir = initialParentDir(this.settings, node().os.homedir());
-    const plan = await this.exporter.plan(file, parentDir, this.settings.lineNumbers);
+    const plan = await this.exporter.plan(file, {
+      parentDir,
+      lineNumbers: this.settings.lineNumbers,
+      mode: this.settings.mode,
+      defaultAuthor: this.settings.defaultAuthor
+    });
     if (typeof plan === "string") {
-      new import_obsidian3.Notice(plan);
+      new import_obsidian4.Notice(plan);
       return;
     }
     new RenderModal(this.app, plan, {
       check: (p) => this.exporter.check(p),
-      pickFolder: async (current) => {
-        try {
-          return await pickFolder("Choose the parent folder", current);
-        } catch (e) {
-          new import_obsidian3.Notice(e instanceof Error ? e.message : String(e));
-          return null;
-        }
-      },
+      pickFolder: (current) => this.pickFolder(current),
       onSubmit: (p) => void this.render(p)
     }).open();
   }
   async render(plan) {
     var _a;
     this.busy = true;
-    this.settings.lastParentDir = plan.parentDir;
     this.settings.lineNumbers = plan.lineNumbers;
-    await this.saveData(this.settings);
-    const progress = new import_obsidian3.Notice("Render Doc: starting\u2026", 0);
+    this.settings.mode = plan.mode;
+    await this.saveSettings();
+    const progress = new import_obsidian4.Notice("Render Doc: starting\u2026", 0);
     try {
-      const outcome = await this.exporter.run(plan, (msg) => progress.setMessage(`Render Doc: ${msg}`));
+      const outcome = await this.exporter.run(plan, preambleFor(this.settings, plan.mode), (msg) => progress.setMessage(`Render Doc: ${msg}`));
       progress.hide();
       if (!outcome.ok) {
         const where = (_a = outcome.logPath) != null ? _a : outcome.buildDir;
-        new import_obsidian3.Notice(`Render Doc failed (${outcome.stage}): ${outcome.message}${where ? `
+        new import_obsidian4.Notice(`Render Doc failed (${outcome.stage}): ${outcome.message}${where ? `
 
 Log: ${where}` : ""}`, ERROR_NOTICE_MS);
         return;
@@ -1603,11 +1893,11 @@ Log: ${where}` : ""}`, ERROR_NOTICE_MS);
       const unmatched = plan.prepared.citations.unmatched.length;
       const tail = unmatched > 0 ? `
 ${unmatched} citation${unmatched === 1 ? " is" : "s are"} highlighted as unmatched.` : "";
-      new import_obsidian3.Notice(`Rendered to ${outcome.folder}${tail}`, 1e4);
+      new import_obsidian4.Notice(`Rendered to ${outcome.folder}${tail}`, 1e4);
       revealInFinder(outcome.pdf);
     } catch (e) {
       progress.hide();
-      new import_obsidian3.Notice(`Render Doc failed: ${e instanceof Error ? e.message : String(e)}`, ERROR_NOTICE_MS);
+      new import_obsidian4.Notice(`Render Doc failed: ${e instanceof Error ? e.message : String(e)}`, ERROR_NOTICE_MS);
     } finally {
       this.busy = false;
     }

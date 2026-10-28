@@ -4,17 +4,20 @@
 //
 // The shell only wires Obsidian to the pure core (src/core/) and the
 // renderer (src/export/); undocumented surfaces go through src/adapter/.
+// The preambles, default author and default parent folder live on the
+// settings page (src/ui/settingsTab.ts).
 
 import { MarkdownView, Notice, Plugin } from 'obsidian';
 
 import { pickFolder, revealInFinder } from './adapter/obsidianInternals';
 import type { RenderDocSettings } from './core/settings';
-import { initialParentDir, mergeSettings } from './core/settings';
+import { expandHome, initialParentDir, mergeSettings, preambleFor } from './core/settings';
 import type { RenderPlan } from './export/exporter';
 import { RenderExporter } from './export/exporter';
 import { pruneBuildDirs } from './export/installer';
 import { node } from './export/node';
 import { RenderModal } from './ui/renderModal';
+import { RenderDocSettingTab } from './ui/settingsTab';
 
 const ERROR_NOTICE_MS = 20000;
 
@@ -26,6 +29,7 @@ export default class RenderDocPlugin extends Plugin {
 	async onload(): Promise<void> {
 		this.settings = mergeSettings(await this.loadData());
 		this.exporter = new RenderExporter(this.app, this.manifest.version);
+		this.addSettingTab(new RenderDocSettingTab(this.app, this));
 
 		this.addCommand({
 			id: 'render-current-note',
@@ -43,39 +47,50 @@ export default class RenderDocPlugin extends Plugin {
 		});
 	}
 
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
+	}
+
+	async pickFolder(current: string): Promise<string | null> {
+		try {
+			return await pickFolder('Choose the parent folder', expandHome(current, node().os.homedir()));
+		} catch (e) {
+			new Notice(e instanceof Error ? e.message : String(e));
+			return null;
+		}
+	}
+
 	private async openDialog(file: NonNullable<MarkdownView['file']>): Promise<void> {
 		if (this.busy) {
 			new Notice('Render Doc is already rendering a note.');
 			return;
 		}
 		const parentDir = initialParentDir(this.settings, node().os.homedir());
-		const plan = await this.exporter.plan(file, parentDir, this.settings.lineNumbers);
+		const plan = await this.exporter.plan(file, {
+			parentDir,
+			lineNumbers: this.settings.lineNumbers,
+			mode: this.settings.mode,
+			defaultAuthor: this.settings.defaultAuthor,
+		});
 		if (typeof plan === 'string') {
 			new Notice(plan);
 			return;
 		}
 		new RenderModal(this.app, plan, {
 			check: (p) => this.exporter.check(p),
-			pickFolder: async (current) => {
-				try {
-					return await pickFolder('Choose the parent folder', current);
-				} catch (e) {
-					new Notice(e instanceof Error ? e.message : String(e));
-					return null;
-				}
-			},
+			pickFolder: (current) => this.pickFolder(current),
 			onSubmit: (p) => void this.render(p),
 		}).open();
 	}
 
 	private async render(plan: RenderPlan): Promise<void> {
 		this.busy = true;
-		this.settings.lastParentDir = plan.parentDir;
 		this.settings.lineNumbers = plan.lineNumbers;
-		await this.saveData(this.settings);
+		this.settings.mode = plan.mode;
+		await this.saveSettings();
 		const progress = new Notice('Render Doc: starting…', 0);
 		try {
-			const outcome = await this.exporter.run(plan, (msg) => progress.setMessage(`Render Doc: ${msg}`));
+			const outcome = await this.exporter.run(plan, preambleFor(this.settings, plan.mode), (msg) => progress.setMessage(`Render Doc: ${msg}`));
 			progress.hide();
 			if (!outcome.ok) {
 				const where = outcome.logPath ?? outcome.buildDir;

@@ -7,7 +7,8 @@
 //   $TMPDIR/render-doc-build/<random>/
 //     source.md      the converted body with raw \autocite / \rdunmatched spans
 //     assets/        vault images the note embeds (pandoc extracts them to media/)
-//     meta.tex  preamble.tex  cite.tex  after.tex  meta.json   (see src/core/latex.ts)
+//     meta.tex  preamble.tex  cite.tex  after.tex  meta.json   (see src/core/latex.ts;
+//                    preamble.tex is the Dev or Submit preamble from the settings page)
 //     refs.bib       BibLaTeX from Zotero Manager (only when the note cites)
 //     job.json       see renderer/job.py
 //
@@ -24,14 +25,13 @@ import { DEFAULT_SIGIL_CHAR } from '../core/exportBody';
 import type { ExportResolver } from '../core/obsidianMarkdown';
 import type { PreparedDocument } from '../core/render';
 import { BIB_FILE, buildFiles, prepareDocument, PREAMBLE_FILE } from '../core/render';
-import { PREAMBLE_PATH_HOME } from '../core/settings';
+import type { RenderMode } from '../core/settings';
 import type { NoteMeta, SourceDiscovery } from '../core/sources';
 import { CITE_SOURCES_KEY, discoverSources } from '../core/sources';
 import { fetchBibLaTeX } from '../core/zotero';
 import { buildRoot, ensureRenderer, missingTools } from './installer';
 import { node } from './node';
 import { runRenderer } from './runRenderer';
-import { stageByStream } from './staging';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'tif', 'tiff', 'bmp', 'svg', 'heic', 'avif', 'pdf']);
 
@@ -49,6 +49,14 @@ export interface RenderPlan {
 	// warning. Only then may delivery write into an existing folder.
 	overwrite: boolean;
 	lineNumbers: boolean; // edited by the dialog
+	mode: RenderMode; // edited by the dialog: which preamble to use
+}
+
+export interface PlanOptions {
+	parentDir: string;
+	lineNumbers: boolean;
+	mode: RenderMode;
+	defaultAuthor: string;
 }
 
 export type RenderOutcome =
@@ -60,18 +68,13 @@ function vaultBasePath(app: App): string | null {
 	return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
 }
 
-export function preamblePath(): string {
-	const { path, os } = node();
-	return path.join(os.homedir(), PREAMBLE_PATH_HOME);
-}
-
 export class RenderExporter {
 	constructor(
 		private app: App,
 		private pluginVersion: string,
 	) {}
 
-	async plan(file: TFile, parentDir: string, lineNumbers: boolean): Promise<RenderPlan | string> {
+	async plan(file: TFile, options: PlanOptions): Promise<RenderPlan | string> {
 		const { app } = this;
 		const base = vaultBasePath(app);
 		if (base === null) return 'Render Doc needs a vault stored on this computer.';
@@ -111,16 +114,17 @@ export class RenderExporter {
 		const stem = safeStem(file.basename);
 		return {
 			file,
-			meta: readDocMeta(frontmatter, file.basename),
+			meta: readDocMeta(frontmatter, file.basename, options.defaultAuthor),
 			discovery,
 			prepared,
 			stagedImages,
 			noteDir: path.join(base, file.parent?.path ?? ''),
-			parentDir,
+			parentDir: options.parentDir,
 			folderName: stem,
 			stem,
 			overwrite: false,
-			lineNumbers,
+			lineNumbers: options.lineNumbers,
+			mode: options.mode,
 		};
 	}
 
@@ -129,7 +133,8 @@ export class RenderExporter {
 		return checkExportTarget(plan.parentDir, plan.folderName, (p) => fs.existsSync(p));
 	}
 
-	async run(plan: RenderPlan, progress: (msg: string) => void): Promise<RenderOutcome> {
+	// `preamble` is the text of the Dev or Submit preamble, per plan.mode.
+	async run(plan: RenderPlan, preamble: string, progress: (msg: string) => void): Promise<RenderOutcome> {
 		const { fs, path, crypto } = node();
 		const fail = (stage: string, message: string, buildDir: string | null = null): RenderOutcome => ({
 			ok: false,
@@ -145,8 +150,7 @@ export class RenderExporter {
 		if (missing.length > 0) {
 			return fail('tools', `Missing ${missing.join(', ')}. Render Doc needs pandoc, MacTeX (latexmk, lualatex, biber) and python3.`);
 		}
-		const preamble = preamblePath();
-		if (!fs.existsSync(preamble)) return fail('preamble', `The LaTeX preamble was not found: ${preamble}`);
+		if (preamble.trim() === '') return fail('preamble', `The ${plan.mode === 'submit' ? 'Submit' : 'Dev'} preamble in Render Doc's settings is empty.`);
 
 		const target = this.check(plan);
 		if (!target.ok) return fail('folder', target.message);
@@ -188,11 +192,7 @@ export class RenderExporter {
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');
 		}
-		try {
-			await stageByStream(preamble, path.join(buildDir, PREAMBLE_FILE));
-		} catch (e) {
-			return fail('preamble', `Could not read the LaTeX preamble (${preamble}): ${e instanceof Error ? e.message : String(e)}`, buildDir);
-		}
+		await fs.promises.writeFile(path.join(buildDir, PREAMBLE_FILE), preamble.endsWith('\n') ? preamble : `${preamble}\n`, 'utf8');
 		if (job.bibliography !== '') await fs.promises.writeFile(path.join(buildDir, BIB_FILE), bib, 'utf8');
 		const jobPath = path.join(buildDir, 'job.json');
 		await fs.promises.writeFile(jobPath, `${JSON.stringify(job, null, 2)}\n`, 'utf8');

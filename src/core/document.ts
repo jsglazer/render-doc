@@ -1,11 +1,14 @@
-// Per-document values: title/author/date from the frontmatter, and the export
-// folder's name and collision check. Pure — no 'obsidian', no I/O (existence
-// checks are injected).
+// Per-document values: the cover page and header fields from the frontmatter,
+// and the export folder's name and collision check. Pure — no 'obsidian', no
+// I/O (existence checks are injected).
 
 export interface DocMeta {
 	title: string; // frontmatter title, else the note's basename
-	authors: string[]; // only when the frontmatter has author:
-	date: string | null; // only when the frontmatter has date:
+	shortTitle: string; // titleshort:, else the title (the Submit header)
+	authors: string[]; // the note's author:, else the Default author setting
+	className: string | null; // class:
+	prof: string | null; // prof:
+	date: string | null; // date:, as written
 }
 
 function asText(value: unknown): string | null {
@@ -14,20 +17,47 @@ function asText(value: unknown): string | null {
 	return null;
 }
 
-// Developer Decision "Title": the title feeds \DocTitle (running header) and
-// pandoc's title (\maketitle); author and date reach pandoc only if present.
-export function readDocMeta(frontmatter: Readonly<Record<string, unknown>> | undefined, basename: string): DocMeta {
+// Developer Decision "Title": the title feeds \DocTitle (running header and
+// cover page). A note's author: overrides the Default author setting (Update000).
+export function readDocMeta(frontmatter: Readonly<Record<string, unknown>> | undefined, basename: string, defaultAuthor = ''): DocMeta {
 	const fm = frontmatter ?? {};
 	const rawAuthor = fm.author;
-	const authors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a): a is string => a !== null);
+	const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a): a is string => a !== null);
+	const fallback = asText(defaultAuthor);
+	const title = asText(fm.title) ?? basename;
 	return {
-		title: asText(fm.title) ?? basename,
-		authors,
+		title,
+		shortTitle: asText(fm.titleshort) ?? title,
+		authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
+		className: asText(fm.class),
+		prof: asText(fm.prof),
 		date: asText(fm.date),
 	};
 }
 
-// pandoc --metadata-file contents (JSON is YAML).
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function ordinal(n: number): string {
+	const tens = n % 100;
+	if (tens >= 11 && tens <= 13) return `${n}th`;
+	return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+}
+
+// The cover page date, "Monday, January 1st, 2020", from a date: such as
+// 2020-01-01 (a time after it is ignored). Anything else is printed as written.
+export function formatCoverDate(raw: string | null): string | null {
+	if (raw === null) return null;
+	const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/.exec(raw.trim());
+	if (!m) return raw;
+	const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+	const d = new Date(Date.UTC(year, month - 1, day));
+	if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return raw;
+	return `${WEEKDAYS[d.getUTCDay()] ?? ''}, ${MONTHS[month - 1] ?? ''} ${ordinal(day)}, ${year}`;
+}
+
+// pandoc --metadata-file contents (JSON is YAML). The title makes pandoc call
+// \maketitle, which the preamble turns into the cover page.
 export function pandocMetadata(meta: DocMeta): Record<string, unknown> {
 	const out: Record<string, unknown> = { title: meta.title };
 	if (meta.authors.length > 0) out.author = meta.authors;

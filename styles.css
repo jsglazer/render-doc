@@ -1,4 +1,26 @@
-/* Render Doc — the pre-export dialog. */
+/* Render Doc — the pre-export dialog and the settings page. */
+.render-doc-title {
+	color: var(--color-red);
+}
+
+/* Dev renders: the red title sits on a red bar. */
+.render-doc-title.is-dev {
+	background-color: rgba(var(--color-red-rgb), 0.18);
+	border-left: 4px solid var(--color-red);
+	border-radius: var(--radius-s);
+	padding: var(--size-4-1) var(--size-4-2);
+}
+
+.render-doc-preamble textarea {
+	width: 100%;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}
+
+.render-doc-preamble .setting-item-info {
+	display: none;
+}
+
 .render-doc-modal .render-doc-path {
 	width: 100%;
 	min-width: 18em;

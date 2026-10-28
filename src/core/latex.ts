@@ -3,15 +3,18 @@
 // Pure — no 'obsidian', no I/O.
 //
 // Include order on the pandoc command line (renderer/render-pdf.sh):
-//   -H meta.tex       \DocTitle, BEFORE LatexPre.tex so its \providecommand
-//                     default leaves the title alone
-//   -H preamble.tex   LatexPre.tex, staged by stream copy
+//   -H meta.tex       \DocTitle, \DocAuthor, … BEFORE the preamble, so its
+//                     \providecommand defaults leave them alone
+//   -H preamble.tex   the Dev or Submit preamble from the settings page
 //   -H cite.tex       \rdunmatched always; biblatex only when the note cites;
-//                     lineno only when the dialog asked for line numbers
-//   -A after.tex      \printbibliography, only when the note cites
+//                     \rdln (Obsidian line numbers) only when the dialog asked
+//   -A after.tex      References on a page of its own, only when the note cites
 //
 // No pandoc --biblatex or --citeproc: the body already carries raw \autocite
 // commands (Developer Decision "biblatex loading").
+
+import type { DocMeta } from './document';
+import { formatCoverDate } from './document';
 
 // Escapes text for a LaTeX argument. Backticks become \textasciigrave{} too,
 // so the result can sit inside a pandoc raw inline span (`…`{=latex}).
@@ -48,13 +51,21 @@ export function unmatchedCommand(text: string): string {
 	return `\\rdunmatched{${latexEscape(text)}}`;
 }
 
-export function metaHeader(title: string): string {
-	const t = latexEscape(title);
+// The per-note macros the preambles use (see src/core/preambles.ts).
+export function metaHeader(meta: DocMeta): string {
+	const t = latexEscape(meta.title);
+	const author = latexEscape(meta.authors.join(', '));
+	const def = (name: string, value: string | null): string => `\\def\\${name}{${value === null ? '' : latexEscape(value)}}`;
 	return [
-		'% Written by Render Doc — included BEFORE LatexPre.tex, so its',
-		'% \\providecommand{\\DocTitle}{} default leaves this title alone.',
+		'% Written by Render Doc — included BEFORE the preamble, so its',
+		'% \\providecommand defaults leave these alone.',
 		`\\def\\DocTitle{${t}}`,
-		`\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfcreator={Render Doc}}}`,
+		def('DocShortTitle', meta.shortTitle),
+		`\\def\\DocAuthor{${author}}`,
+		def('DocClass', meta.className),
+		def('DocProf', meta.prof),
+		def('DocDate', formatCoverDate(meta.date)),
+		`\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfauthor={${author}},pdfcreator={Render Doc}}}`,
 		'',
 	].join('\n');
 }
@@ -92,16 +103,31 @@ const BIBLATEX = [
 	'\\DeclareDelimFormat{volnumdelim}{}',
 	'\\DeclareFieldFormat{pages}{#1}',
 	'\\renewcommand*{\\bibpagespunct}{\\addcolon\\space}',
+	'\\defbibheading{rdreferences}[\\refname]{\\section*{\\centering #1}\\markboth{#1}{#1}}',
 ];
 
-// Every line of body text numbered in the left margin, counting through the whole document.
-const LINE_NUMBERS = ['\\usepackage{lineno}', '\\linenumbers'];
+// Obsidian's line number in the left margin, beside the first printed line of
+// each block (Update000; see src/core/lineMarkers.ts). \rdln must vanish from
+// running heads and PDF bookmarks when it sits in a heading.
+const LINE_NUMBERS = [
+	'\\usepackage{marginnote}',
+	'\\reversemarginpar',
+	'\\makeatletter',
+	'\\DeclareRobustCommand{\\rdln}[1]{\\leavevmode\\marginnote{\\hfill\\normalfont\\scriptsize\\color{gray}#1}}',
+	'\\let\\rd@markright\\markright',
+	'\\renewcommand*{\\markright}[1]{{\\let\\rdln\\@gobble\\rd@markright{#1}}}',
+	'\\let\\rd@markboth\\markboth',
+	'\\renewcommand*{\\markboth}[2]{{\\let\\rdln\\@gobble\\rd@markboth{#1}{#2}}}',
+	'\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdln\\@gobble}\\fi',
+	'\\makeatother',
+];
 
 export function citeHeader(withBibliography: boolean, lineNumbers = false): string {
-	const lines = ['% Written by Render Doc — included AFTER LatexPre.tex.', ...UNMATCHED_MACRO];
+	const lines = ['% Written by Render Doc — included AFTER the preamble.', ...UNMATCHED_MACRO];
 	if (withBibliography) lines.push(...BIBLATEX);
 	if (lineNumbers) lines.push(...LINE_NUMBERS);
 	return `${lines.join('\n')}\n`;
 }
 
-export const BIBLIOGRAPHY_TRAILER = '\\printbibliography[title={References}]\n';
+// References start a new page under a centred heading (Update000).
+export const BIBLIOGRAPHY_TRAILER = '\\clearpage\n\\printbibliography[heading=rdreferences, title={References}]\n';

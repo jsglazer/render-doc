@@ -10,12 +10,14 @@ import type { DocMeta } from './document';
 import { pandocMetadata } from './document';
 import { extractBody } from './exportBody';
 import { BIBLIOGRAPHY_TRAILER, citeHeader, metaHeader } from './latex';
+import { markersToLatex, markSourceLines, stripMarkers } from './lineMarkers';
 import type { ConversionIssue, ExportResolver } from './obsidianMarkdown';
 import { toPandocMarkdown } from './obsidianMarkdown';
 import type { CiteIndex } from './sources';
 
 export interface PreparedDocument {
 	markdown: string; // pandoc Markdown with raw \autocite / \rdunmatched spans
+	numberedMarkdown: string; // the same, plus raw \rdln{<Obsidian line>} spans
 	citations: CitationResult;
 	issues: ConversionIssue[];
 	outlineLinesStripped: number;
@@ -29,13 +31,16 @@ export async function prepareDocument(
 	resolver: ExportResolver,
 	index: CiteIndex,
 ): Promise<PreparedDocument> {
-	// Extract the prose, convert Obsidian syntax, add the blank lines pandoc
-	// needs before headings/quotes/tables/fences, then resolve citations.
-	const extraction = extractBody(doc, sigilChar);
+	// Mark each source line with its Obsidian line number, extract the prose,
+	// convert Obsidian syntax, add the blank lines pandoc needs before
+	// headings/quotes/tables/fences, then resolve citations. The markers ride
+	// along, then become \rdln or vanish (src/core/lineMarkers.ts).
+	const extraction = extractBody(markSourceLines(doc, sigilChar), sigilChar);
 	const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
 	const citations = replaceCitations(separateBlocks(converted.markdown), index);
 	return {
-		markdown: citations.markdown,
+		markdown: stripMarkers(citations.markdown),
+		numberedMarkdown: markersToLatex(citations.markdown),
 		citations,
 		issues: converted.issues,
 		outlineLinesStripped: extraction.outlineLinesStripped,
@@ -77,8 +82,8 @@ export function buildFiles(
 ): BuildFiles {
 	const cites = prepared.citations.citekeys.length > 0;
 	const files: Record<string, string> = {
-		'source.md': `${prepared.markdown}\n`,
-		'meta.tex': metaHeader(meta.title),
+		'source.md': `${options.lineNumbers === true ? prepared.numberedMarkdown : prepared.markdown}\n`,
+		'meta.tex': metaHeader(meta),
 		'cite.tex': citeHeader(cites, options.lineNumbers ?? false),
 		'meta.json': `${JSON.stringify(pandocMetadata(meta), null, 2)}\n`,
 	};

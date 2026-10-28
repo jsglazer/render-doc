@@ -1,36 +1,33 @@
 // Headless integration test of renderer/render-pdf.sh with the real toolchain:
-// pandoc, latexmk, lualatex, biber, Josh's LatexPre.tex and a fixture refs.bib.
-// The build folder is prepared by the same core functions the plugin uses
-// (prepareDocument, buildFiles) and LatexPre.tex is staged by the plugin's own
-// stream copy (stageByStream).
+// pandoc, latexmk, lualatex, biber, the built-in Dev and Submit preambles and
+// a fixture refs.bib. The build folder is prepared by the same core functions
+// the plugin uses (prepareDocument, buildFiles).
 //
 // Everything is written under a fresh temp folder: the export parent, the build
 // folder and the biber cache. Nothing touches ~/Library/CloudStorage/Dropbox/
 // _Schar/Classes or any .obsidian folder. The test skips itself on a Mac
-// without the toolchain or LatexPre.tex.
+// without the toolchain.
 
 import { execFileSync } from 'node:child_process';
 import { accessSync, constants, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { readDocMeta } from '../../src/core/document';
-import { citeHeader } from '../../src/core/latex';
 import type { ExportResolver } from '../../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../../src/core/render';
-import { PREAMBLE_PATH_HOME } from '../../src/core/settings';
+import type { PreparedDocument } from '../../src/core/render';
+import { DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE } from '../../src/core/preambles';
 import { discoverSources } from '../../src/core/sources';
 import { SEARCH_PATH } from '../../src/export/node';
 import { runRenderer } from '../../src/export/runRenderer';
 import type { RendererStatus } from '../../src/export/runRenderer';
-import { stageByStream } from '../../src/export/staging';
 
 const ROOT = join(__dirname, '..', '..');
 const RENDERER = join(ROOT, 'renderer', 'render-pdf.sh');
 const FIXTURES = join(ROOT, 'tests', 'fixtures');
-const PREAMBLE = join(homedir(), PREAMBLE_PATH_HOME);
 const TOOLS = ['pandoc', 'latexmk', 'lualatex', 'biber', 'python3', 'pdftotext'];
 const AUX = /\.(aux|bbl|bcf|blg|fls|fdb_latexmk|run\.xml|log|out|toc)$/;
 
@@ -46,14 +43,18 @@ function hasTool(name: string): boolean {
 }
 
 const missing = TOOLS.filter((t) => !hasTool(t));
-const ready = missing.length === 0 && existsSync(PREAMBLE);
+const ready = missing.length === 0;
 if (!ready) {
-	process.stderr.write(`render integration test skipped: ${missing.length > 0 ? `missing ${missing.join(', ')}` : `no ${PREAMBLE}`}\n`);
+	process.stderr.write(`render integration test skipped: missing ${missing.join(', ')}\n`);
 }
 
 const NOTE = [
 	'---',
 	'title: Polarization & Money',
+	'titleshort: Polarization',
+	'class: POLS 501',
+	'prof: Dr. Rivera',
+	'date: 2026-10-28',
 	'---',
 	'@ Outline entry that must not appear',
 	'Campaign money predicts roll-call ideology (Bonica, 2018: 123), and state legislatures polarize (Shor and McCarty, 2011).',
@@ -87,6 +88,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 	let parentDir = '';
 	let status: RendererStatus;
 	let unmatchedCount = 0;
+	let prepared: PreparedDocument;
 
 	beforeAll(async () => {
 		tmp = mkdtempSync(join(tmpdir(), 'render-doc-it-'));
@@ -110,9 +112,10 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 			readNote: () => Promise.resolve(''),
 			stageImage: () => 'assets/1-fig.png',
 		};
-		const prepared = await prepareDocument(NOTE, 'Classes/Polarization/Paper.md', '@', resolver, discovery.index);
+		prepared = await prepareDocument(NOTE, 'Classes/Polarization/Paper.md', '@', resolver, discovery.index);
 		unmatchedCount = prepared.citations.unmatched.length;
-		const { files, job } = buildFiles(prepared, readDocMeta({ title: 'Polarization & Money' }, 'Paper'), {
+		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
+		const { files, job } = buildFiles(prepared, meta, {
 			resourcePath: FIXTURES,
 			parentDir,
 			folderName: 'Paper',
@@ -120,7 +123,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 			overwrite: false,
 		});
 		for (const [name, content] of Object.entries(files)) writeFileSync(join(buildDir, name), content, 'utf8');
-		await stageByStream(PREAMBLE, join(buildDir, 'preamble.tex'));
+		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_DEV_PREAMBLE, 'utf8');
 		copyFileSync(join(FIXTURES, 'refs.bib'), join(buildDir, 'refs.bib'));
 		copyFileSync(join(FIXTURES, 'fig.png'), join(buildDir, 'assets', '1-fig.png'));
 		writeFileSync(join(buildDir, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
@@ -158,6 +161,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(text).toContain('(Jones, 2015)');
 		expect(text).toContain('Polarization & Money');
 		expect(text).toContain('References');
+		expect(text).toContain('Joshua S. Glazer');
 		expect(text).toContain('Bonica, Adam. 2018.');
 		expect(text).toContain('American Journal of Political Science 62(4): 830–848.');
 		expect(text).toContain('Shor, Boris, and Nolan McCarty. 2011.');
@@ -172,7 +176,8 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(tex).toContain('\\autocite[123]{Bonica-InferringRollCallScores-2018}');
 		expect(tex).toContain('\\rdunmatched{(Jones, 2015)}');
 		expect(tex).toContain('\\addbibresource{refs.bib}');
-		expect(tex).toContain('\\fancyhead[R]{\\small{Joshua S. Glazer}}');
+		expect(tex).toContain('\\fancyhead[R]{\\small{\\DocAuthor}}');
+		expect(tex).toContain('\\def\\DocAuthor{Joshua S. Glazer}');
 		expect(tex).toMatch(/\\includegraphics(\[[^\]]*\])?\{media\//);
 		expect(tex).not.toContain(buildDir);
 	});
@@ -198,21 +203,55 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(pdfText(join(copy, 'Paper.pdf')).replace(/\s+/g, ' ')).toContain('(Bonica, 2018: 123)');
 	}, 300_000);
 
-	it('numbers the lines when cite.tex asks for it', () => {
-		const numbered = join(tmp, 'numbered');
-		cpSync(join(parentDir, 'Paper'), numbered, { recursive: true });
-		const lineno = citeHeader(false, true).trim().split('\n').slice(-2).join('\n');
-		const tex = readFileSync(join(numbered, 'Paper.tex'), 'utf8').replace('\\begin{document}', `${lineno}\n\\begin{document}`);
-		writeFileSync(join(numbered, 'Paper.tex'), tex, 'utf8');
-		const env = { ...process.env, PATH: ENV_PATH };
-		const biber = execFileSync('/bin/zsh', ['-c', `LOG=/dev/null; source ${JSON.stringify(join(ROOT, 'renderer', 'lib.sh'))}; resolve_biber`], { encoding: 'utf8', env }).trim();
-		writeFileSync(join(numbered, 'rc'), `$biber = q{"${biber}" %O %S};\n`);
-		execFileSync('latexmk', ['-lualatex', '-interaction=nonstopmode', '-halt-on-error', '-r', 'rc', 'Paper.tex'], { cwd: numbered, env, stdio: 'ignore', timeout: 240_000 });
-		const text = pdfText(join(numbered, 'Paper.pdf'));
-		expect(text).toMatch(/^\s*1\s+\S/m);
-		// One running count through the whole document: line 1 appears once, never again on a later page.
-		expect(text.match(/^\s*1\s+\S/gm)).toHaveLength(1);
-		expect(pdfText(join(parentDir, 'Paper', 'Paper.pdf'))).not.toMatch(/^\s*1\s+\S/m);
+	it('draws the cover page, then the text from page 1, then References on a page of its own', () => {
+		const pages = pdfText(join(parentDir, 'Paper', 'Paper.pdf')).split('\f').filter((p) => p.trim() !== '');
+		const cover = (pages[0] ?? '').replace(/\s+/g, ' ');
+		expect(cover).toContain('Polarization & Money');
+		expect(cover).toContain('Joshua S. Glazer');
+		expect(cover).toContain('POLS 501');
+		expect(cover).toContain('Dr. Rivera');
+		expect(cover).toContain('Wednesday, October 28th, 2026');
+		expect(cover).not.toContain('Campaign money');
+		expect(cover).not.toMatch(/\d+ of \d+/);
+		expect(pages[1]).toContain('Campaign money');
+		expect(pages[1]).toMatch(/1 of 2/);
+		const refs = pages[pages.length - 1] ?? '';
+		expect(refs).toMatch(/^\s*\S.*\n[\s\S]*References/);
+		expect(refs).not.toContain('Campaign money');
+		expect(refs).toContain('Bonica, Adam. 2018.');
+		expect(refs).toMatch(/2 of 2/);
+		expect(refs).toMatch(/\d{4}-\d{2}-\d{2} at/);
+	});
+
+	it('Submit with line numbers: short title header, centred page count, no stamp, Obsidian line numbers', async () => {
+		const build2 = join(tmp, 'build-submit');
+		const parent2 = join(tmp, 'out-submit');
+		mkdirSync(join(build2, 'assets'), { recursive: true });
+		mkdirSync(parent2);
+		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization' }, 'Paper', 'Joshua S. Glazer');
+		const { files, job } = buildFiles(prepared, meta, { resourcePath: FIXTURES, parentDir: parent2, folderName: 'Paper', stem: 'Paper', overwrite: false }, { lineNumbers: true });
+		for (const [name, content] of Object.entries(files)) writeFileSync(join(build2, name), content, 'utf8');
+		writeFileSync(join(build2, 'preamble.tex'), DEFAULT_SUBMIT_PREAMBLE, 'utf8');
+		copyFileSync(join(FIXTURES, 'refs.bib'), join(build2, 'refs.bib'));
+		copyFileSync(join(FIXTURES, 'fig.png'), join(build2, 'assets', '1-fig.png'));
+		writeFileSync(join(build2, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
+		const st = await runRenderer(RENDERER, join(build2, 'job.json'), build2);
+		expect(st, JSON.stringify(st)).toMatchObject({ ok: true });
+
+		const pages = pdfText(join(parent2, 'Paper', 'Paper.pdf')).split('\f').filter((p) => p.trim() !== '');
+		const body = pages[1] ?? '';
+		expect(body).toMatch(/Polarization\s+Joshua S\. Glazer/);
+		expect(body).not.toContain('Polarization & Money Joshua');
+		expect(body).toMatch(/^\s+1 of 2\s*$/m);
+		expect(body).not.toMatch(/\d{4}-\d{2}-\d{2} at/);
+		// By Obsidian's count: 9 and 11 are paragraphs, 12 a heading typed under text, 13 its text.
+		expect(body).toMatch(/^\s*9\s+Campaign money/m);
+		expect(body).toMatch(/^\s*11\s+An uncited claim/m);
+		expect(body).toMatch(/^\s*12\s+.*State-level data/m);
+		expect(body).toMatch(/^\s*13\s+A heading typed/m);
+		// Running head and bookmarks stay clean of the markers.
+		const tex = readFileSync(join(parent2, 'Paper', 'Paper.tex'), 'utf8');
+		expect(tex).toContain('\\rdln{9}');
 	}, 300_000);
 
 	it('overwrites only its own files when the job says overwrite', () => {
