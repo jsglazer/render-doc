@@ -6,7 +6,8 @@
 //   -H meta.tex       \DocTitle, \DocAuthor, … BEFORE the preamble, so its
 //                     \providecommand defaults leave them alone
 //   -H preamble.tex   the Dev or Submit preamble from the settings page
-//   -H cite.tex       \rdunmatched always; biblatex only when the note cites;
+//   -H cite.tex       \rdunmatched always (highlight, or plain text when the
+//                     dialog hides citation alerts); biblatex only when the note cites;
 //                     \rdln (Obsidian line numbers) only when the dialog asked;
 //                     \rdpagebreak always, \clearpage only when the dialog asked
 //   -A after.tex      References on a page of its own, only when the note cites
@@ -74,13 +75,14 @@ export function metaHeader(meta: DocMeta): string {
 
 // Unmatched and ambiguous citation-like parentheticals stay in the text,
 // highlighted. lua-ul's \highLight breaks across lines; \colorbox cannot
-// (Developer Decision "Unmatched highlight").
-const UNMATCHED_MACRO = [
-	'\\usepackage{xcolor}',
-	'\\usepackage{luacolor}',
-	'\\usepackage{lua-ul}',
-	'\\newcommand{\\rdunmatched}[1]{\\highLight[yellow!40]{#1}}',
-];
+// (Developer Decision "Unmatched highlight"). The dialog's "Hide citation
+// alerts" toggle defines \rdunmatched as the plain text instead, so the
+// parenthetical prints unshaded.
+const UNMATCHED_PACKAGES = ['\\usepackage{xcolor}', '\\usepackage{luacolor}', '\\usepackage{lua-ul}'];
+
+export function unmatchedMacro(hide: boolean): string {
+	return `\\newcommand{\\rdunmatched}[1]{${hide ? '#1' : '\\highLight[yellow!40]{#1}'}}`;
+}
 
 // biblatex-ext's ext-authoryear (TeX Live 2024 has no apsa.bbx), configured so
 // \autocite prints exactly (Bonica, 2018: 123) and the bibliography reads
@@ -133,10 +135,21 @@ export function pageBreakMacro(pageBreaks: boolean): string {
 	return `\\newcommand{\\rdpagebreak}{${pageBreaks ? '\\clearpage' : ''}}`;
 }
 
-export function citeHeader(withBibliography: boolean, lineNumbers = false, pageBreaks = false): string {
-	const lines = ['% Written by Render Doc — included AFTER the preamble.', ...UNMATCHED_MACRO, pageBreakMacro(pageBreaks)];
+export interface CiteHeaderOptions {
+	lineNumbers?: boolean;
+	pageBreaks?: boolean;
+	hideUnmatched?: boolean;
+}
+
+export function citeHeader(withBibliography: boolean, options: CiteHeaderOptions = {}): string {
+	const lines = [
+		'% Written by Render Doc — included AFTER the preamble.',
+		...UNMATCHED_PACKAGES,
+		unmatchedMacro(options.hideUnmatched ?? false),
+		pageBreakMacro(options.pageBreaks ?? false),
+	];
 	if (withBibliography) lines.push(...BIBLATEX);
-	if (lineNumbers) lines.push(...LINE_NUMBERS);
+	if (options.lineNumbers === true) lines.push(...LINE_NUMBERS);
 	return `${lines.join('\n')}\n`;
 }
 

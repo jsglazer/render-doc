@@ -54,6 +54,8 @@ export interface RenderPlan {
 	// Edited by the dialog: \clearpage before level-one headings past the
 	// note's opening lines. Not remembered — every dialog opens with it off.
 	pageBreaks: boolean;
+	// Edited by the dialog: print unmatched citations unshaded. Not remembered.
+	hideUnmatched: boolean;
 }
 
 export interface PlanOptions {
@@ -132,6 +134,7 @@ export class RenderExporter {
 			mode: options.mode,
 			openFolder: options.openFolder,
 			pageBreaks: false,
+			hideUnmatched: false,
 		};
 	}
 
@@ -194,7 +197,7 @@ export class RenderExporter {
 				stem: plan.stem,
 				overwrite: plan.overwrite,
 			},
-			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks },
+			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched },
 		);
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');

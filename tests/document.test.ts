@@ -152,13 +152,19 @@ describe('latex', () => {
 	});
 	it('defines \\rdln (margin line numbers) only when line numbers are asked for', () => {
 		expect(citeHeader(true)).not.toContain('rdln');
-		expect(citeHeader(false, true)).toContain('\\usepackage{marginnote}');
-		expect(citeHeader(false, true)).toContain('\\DeclareRobustCommand{\\rdln}');
-		expect(citeHeader(false, true)).not.toContain('lineno');
+		expect(citeHeader(false, { lineNumbers: true })).toContain('\\usepackage{marginnote}');
+		expect(citeHeader(false, { lineNumbers: true })).toContain('\\DeclareRobustCommand{\\rdln}');
+		expect(citeHeader(false, { lineNumbers: true })).not.toContain('lineno');
+	});
+	it('prints unmatched citations as plain text when citation alerts are hidden', () => {
+		expect(citeHeader(false)).toContain('\\newcommand{\\rdunmatched}[1]{\\highLight[yellow!40]{#1}}');
+		const hidden = citeHeader(true, { hideUnmatched: true });
+		expect(hidden).toContain('\\newcommand{\\rdunmatched}[1]{#1}');
+		expect(hidden).not.toContain('\\highLight');
 	});
 	it('defines \\rdpagebreak as \\clearpage only when page breaks are asked for', () => {
 		expect(citeHeader(false)).toContain('\\newcommand{\\rdpagebreak}{}');
-		expect(citeHeader(true, true, true)).toContain('\\newcommand{\\rdpagebreak}{\\clearpage}');
+		expect(citeHeader(true, { lineNumbers: true, pageBreaks: true })).toContain('\\newcommand{\\rdpagebreak}{\\clearpage}');
 	});
 	it('puts References on its own page under a centred heading', () => {
 		expect(citeHeader(true)).toContain('\\setlength{\\bibitemsep}{.67\\baselineskip}');

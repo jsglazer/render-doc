@@ -288,10 +288,10 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 // off and on. pdftotext separates pages with a form feed.
 describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => {
 	let tmp = '';
-	const NOTE_BREAKS = ['---', 'title: Breaks', '---', '# Opening', ...Array.from({ length: 16 }, (_, i) => `Sentence ${i + 1}.`), '# Later Section', 'Final words.'].join('\n');
+	const NOTE_BREAKS = ['---', 'title: Breaks', '---', '# Opening', ...Array.from({ length: 16 }, (_, i) => `Sentence ${i + 1}.`), '# Later Section', 'Final words with an unmatched cite (Jones, 2015).'].join('\n');
 	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
 
-	async function render(name: string, pageBreaks: boolean): Promise<string[]> {
+	async function render(name: string, pageBreaks: boolean, hideUnmatched = false): Promise<string[]> {
 		const buildDir = join(tmp, `build-${name}`);
 		const parentDir = join(tmp, `out-${name}`);
 		mkdirSync(join(buildDir, 'assets'), { recursive: true });
@@ -301,7 +301,7 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 			prepared,
 			readDocMeta({ title: 'Breaks' }, 'Breaks'),
 			{ resourcePath: FIXTURES, parentDir, folderName: 'Breaks', stem: 'Breaks', overwrite: false },
-			{ mode: 'dev', pageBreaks },
+			{ mode: 'dev', pageBreaks, hideUnmatched },
 		);
 		for (const [file, content] of Object.entries(files)) writeFileSync(join(buildDir, file), content, 'utf8');
 		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_DEV_PREAMBLE, 'utf8');
@@ -329,5 +329,14 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 		expect(on[0]).toContain('Sentence 16.');
 		expect(on[0]).not.toContain('Later Section');
 		expect(on[1]).toContain('Later Section');
+	}, 300_000);
+
+	it('prints an unmatched citation unshaded when citation alerts are hidden', async () => {
+		const pages = await render('hidden', false, true);
+		expect(pages.join('')).toContain('(Jones, 2015)');
+		const tex = readFileSync(join(tmp, 'out-hidden', 'Breaks', 'Breaks.tex'), 'utf8');
+		expect(tex).toContain('\\newcommand{\\rdunmatched}[1]{#1}');
+		expect(tex).not.toContain('\\highLight[yellow!40]');
+		expect(tex).toContain('\\rdunmatched{(Jones, 2015)}');
 	}, 300_000);
 });

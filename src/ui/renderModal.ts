@@ -5,7 +5,8 @@
 // citations left highlighted, with every warning. A Dev/Submit selector and a
 // line-numbers toggle, both remembered between renders. The toggle is Dev
 // only: Submit never prints line numbers, so it is hidden there. A
-// page-break toggle (both modes) that always opens off. No font size.
+// page-break toggle and a hide-citation-alerts toggle (both modes) that
+// always open off. No font size.
 //
 // The title sits in an alert box: yellow for Dev, red for Submit, so a
 // working draft is hard to mistake for the copy being handed in.
@@ -114,6 +115,15 @@ export class RenderModal extends Modal {
 			.addToggle((t) =>
 				t.setValue(plan.pageBreaks).onChange((v) => {
 					plan.pageBreaks = v;
+				}),
+			);
+
+		new Setting(contentEl)
+			.setName('Hide citation alerts')
+			.setDesc('Print unmatched citations as plain text, without the yellow highlight. They are still listed in the warnings below.')
+			.addToggle((t) =>
+				t.setValue(plan.hideUnmatched).onChange((v) => {
+					plan.hideUnmatched = v;
 				}),
 			);
 

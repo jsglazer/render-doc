@@ -476,12 +476,10 @@ function metaHeader(meta) {
     ""
   ].join("\n");
 }
-var UNMATCHED_MACRO = [
-  "\\usepackage{xcolor}",
-  "\\usepackage{luacolor}",
-  "\\usepackage{lua-ul}",
-  "\\newcommand{\\rdunmatched}[1]{\\highLight[yellow!40]{#1}}"
-];
+var UNMATCHED_PACKAGES = ["\\usepackage{xcolor}", "\\usepackage{luacolor}", "\\usepackage{lua-ul}"];
+function unmatchedMacro(hide) {
+  return `\\newcommand{\\rdunmatched}[1]{${hide ? "#1" : "\\highLight[yellow!40]{#1}"}}`;
+}
 var BIBLATEX = [
   "\\usepackage{csquotes}",
   "\\usepackage[backend=biber, style=ext-authoryear, maxcitenames=2, uniquename=false, uniquelist=false, dashed=false]{biblatex}",
@@ -521,10 +519,16 @@ var LINE_NUMBERS = [
 function pageBreakMacro(pageBreaks) {
   return `\\newcommand{\\rdpagebreak}{${pageBreaks ? "\\clearpage" : ""}}`;
 }
-function citeHeader(withBibliography, lineNumbers = false, pageBreaks = false) {
-  const lines = ["% Written by Render Doc \u2014 included AFTER the preamble.", ...UNMATCHED_MACRO, pageBreakMacro(pageBreaks)];
+function citeHeader(withBibliography, options = {}) {
+  var _a, _b;
+  const lines = [
+    "% Written by Render Doc \u2014 included AFTER the preamble.",
+    ...UNMATCHED_PACKAGES,
+    unmatchedMacro((_a = options.hideUnmatched) != null ? _a : false),
+    pageBreakMacro((_b = options.pageBreaks) != null ? _b : false)
+  ];
   if (withBibliography) lines.push(...BIBLATEX);
-  if (lineNumbers) lines.push(...LINE_NUMBERS);
+  if (options.lineNumbers === true) lines.push(...LINE_NUMBERS);
   return `${lines.join("\n")}
 `;
 }
@@ -1055,14 +1059,14 @@ async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
 var PREAMBLE_FILE = "preamble.tex";
 var BIB_FILE = "refs.bib";
 function buildFiles(prepared, meta, target, options = {}) {
-  var _a, _b;
+  var _a;
   const cites = prepared.citations.citekeys.length > 0;
   const numbered = options.lineNumbers === true && lineNumbersAllowed((_a = options.mode) != null ? _a : "dev");
   const files = {
     "source.md": `${numbered ? prepared.numberedMarkdown : prepared.markdown}
 `,
     "meta.tex": metaHeader(meta),
-    "cite.tex": citeHeader(cites, numbered, (_b = options.pageBreaks) != null ? _b : false),
+    "cite.tex": citeHeader(cites, { lineNumbers: numbered, pageBreaks: options.pageBreaks, hideUnmatched: options.hideUnmatched }),
     "meta.json": `${JSON.stringify(pandocMetadata(meta), null, 2)}
 `
   };
@@ -1619,7 +1623,8 @@ var RenderExporter = class {
       lineNumbers: options.lineNumbers,
       mode: options.mode,
       openFolder: options.openFolder,
-      pageBreaks: false
+      pageBreaks: false,
+      hideUnmatched: false
     };
   }
   check(plan) {
@@ -1675,7 +1680,7 @@ var RenderExporter = class {
         stem: plan.stem,
         overwrite: plan.overwrite
       },
-      { lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks }
+      { lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched }
     );
     for (const [name, content] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(buildDir, name), content, "utf8");
@@ -1760,6 +1765,11 @@ var RenderModal = class extends import_obsidian2.Modal {
     new import_obsidian2.Setting(contentEl).setName("Page break before # headings").setDesc(`Start each level-one heading (# Heading) on a new page, except one in the first ${PAGE_BREAK_SKIP_LINES} lines below the frontmatter.`).addToggle(
       (t) => t.setValue(plan.pageBreaks).onChange((v) => {
         plan.pageBreaks = v;
+      })
+    );
+    new import_obsidian2.Setting(contentEl).setName("Hide citation alerts").setDesc("Print unmatched citations as plain text, without the yellow highlight. They are still listed in the warnings below.").addToggle(
+      (t) => t.setValue(plan.hideUnmatched).onChange((v) => {
+        plan.hideUnmatched = v;
       })
     );
     new import_obsidian2.Setting(contentEl).setName("Open export folder").setDesc("Show the new PDF in Finder when rendering finishes.").addToggle(
@@ -1969,7 +1979,7 @@ Log: ${where}` : ""}`, ERROR_NOTICE_MS);
       }
       const unmatched = plan.prepared.citations.unmatched.length;
       const tail = unmatched > 0 ? `
-${unmatched} citation${unmatched === 1 ? " is" : "s are"} highlighted as unmatched.` : "";
+${unmatched} citation${unmatched === 1 ? " is" : "s are"} ${plan.hideUnmatched ? "unmatched (not highlighted)" : "highlighted as unmatched"}.` : "";
       new import_obsidian4.Notice(`Rendered to ${outcome.folder}${tail}`, 1e4);
       if (plan.openFolder) revealInFinder(outcome.pdf);
     } catch (e) {
