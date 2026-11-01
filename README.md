@@ -16,6 +16,7 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 - **References on their own page.** The bibliography starts a new page under a centred **References** heading, with two-thirds of a blank line between entries.
 - **Obsidian syntax handled.** Headings, quotes, tables and code blocks typed directly under a line of text still render as headings, quotes, tables and code, though pandoc would otherwise merge them into the paragraph above. Wikilinks become plain text, embedded notes and sections are inlined, images are copied in, `%%comments%%` are dropped, and Virtual Outliner outline lines (`@`, `@@ …`) are stripped.
 - **Line numbers that match Obsidian.** A **Line numbers** switch in the dialog prints each paragraph's, heading's, list item's or quote line's Obsidian line number in the left margin, beside its first printed line, so the PDF and the note can be cross-referenced. Line numbers are for Dev renders only: the switch is hidden for Submit, and a Submit render never carries them. Wrapped lines carry no number, and code, math, tables and embeds are never numbered. The choice is remembered for the next render.
+- **Optional page break before each `#` heading.** Turn on **Page break before # headings** in the dialog to start each level-one heading (`# Heading`) on a new page, in Dev or Submit. A `#` heading in the first 15 lines below the frontmatter never gets a break, so an opening heading can't leave the title alone on page 1. `##` and deeper headings, `#` lines inside code blocks, and headings from embedded notes are not affected. The switch starts off every time the dialog opens. The delivered `.tex` keeps the breaks when recompiled.
 - **Overwrites only with a warning.** If the export folder already exists, the dialog warns that rendering will overwrite it. Rendering anyway replaces the PDF, `.tex`, `refs.bib` and `media/` in that folder and leaves any other files there alone.
 - **Shows the result, if you ask.** Turn on **Open export folder** in the dialog (it starts off and remembers your choice) to show the new PDF in Finder when rendering finishes.
 
@@ -49,7 +50,7 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 1. Open a note and run **Render Doc: Render current note** from the command palette.
 2. In the dialog, choose the **Version**: Dev or Submit.
 3. Check the **Parent folder** (it starts on the Default parent folder setting; **Choose…** opens a folder picker) and the **Folder name** (it defaults to the note's name plus the version, such as `TheoryHypo Dev`, and the suffix follows the Version choice). If that folder already exists, a warning says rendering will overwrite it.
-4. For a Dev render, turn on **Line numbers** if you want Obsidian's line numbers in the margin, and **Open export folder** if you want Finder to show the PDF afterwards.
+4. For a Dev render, turn on **Line numbers** if you want Obsidian's line numbers in the margin. In either version, turn on **Page break before # headings** to start each top-level section on a new page, and **Open export folder** if you want Finder to show the PDF afterwards.
 5. Read the summary: how many source notes were found, how many citations resolved, and any left unmatched, with the reason for each.
 6. Click **Render**.
 
@@ -85,7 +86,7 @@ npm run lint
 npm test           # unit tests plus the real-toolchain integration test
 ```
 
-The integration test (`tests/integration/`) renders a fixture paper with the real pandoc, latexmk, lualatex and biber and the built-in Dev and Submit preambles, all in a temporary folder. It checks the cover page, the References page, the Submit header and the Obsidian line numbers. It skips itself when any of them is missing.
+The integration test (`tests/integration/`) renders a fixture paper with the real pandoc, latexmk, lualatex and biber and the built-in Dev and Submit preambles, all in a temporary folder. It checks the cover page, the References page, the Submit header, the Obsidian line numbers and the page breaks before `#` headings. It skips itself when any of them is missing.
 
 ## License
 
