@@ -80,14 +80,14 @@ export function buildFiles(
 	prepared: PreparedDocument,
 	meta: DocMeta,
 	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
-	options: { lineNumbers?: boolean; mode?: RenderMode } = {},
+	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean } = {},
 ): BuildFiles {
 	const cites = prepared.citations.citekeys.length > 0;
 	const numbered = options.lineNumbers === true && lineNumbersAllowed(options.mode ?? 'dev');
 	const files: Record<string, string> = {
 		'source.md': `${numbered ? prepared.numberedMarkdown : prepared.markdown}\n`,
 		'meta.tex': metaHeader(meta),
-		'cite.tex': citeHeader(cites, numbered),
+		'cite.tex': citeHeader(cites, numbered, options.pageBreaks ?? false),
 		'meta.json': `${JSON.stringify(pandocMetadata(meta), null, 2)}\n`,
 	};
 	if (cites) files['after.tex'] = BIBLIOGRAPHY_TRAILER;

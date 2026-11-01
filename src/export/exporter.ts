@@ -51,6 +51,9 @@ export interface RenderPlan {
 	lineNumbers: boolean; // edited by the dialog
 	mode: RenderMode; // edited by the dialog: which preamble to use
 	openFolder: boolean; // edited by the dialog: reveal the PDF in Finder afterwards
+	// Edited by the dialog: \clearpage before level-one headings past the
+	// note's opening lines. Not remembered — every dialog opens with it off.
+	pageBreaks: boolean;
 }
 
 export interface PlanOptions {
@@ -128,6 +131,7 @@ export class RenderExporter {
 			lineNumbers: options.lineNumbers,
 			mode: options.mode,
 			openFolder: options.openFolder,
+			pageBreaks: false,
 		};
 	}
 
@@ -190,7 +194,7 @@ export class RenderExporter {
 				stem: plan.stem,
 				overwrite: plan.overwrite,
 			},
-			{ lineNumbers: plan.lineNumbers, mode: plan.mode },
+			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks },
 		);
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');

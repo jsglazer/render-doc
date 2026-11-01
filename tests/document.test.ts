@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { checkExportTarget, folderNameFor, folderNameProblem, formatCoverDate, pandocMetadata, readDocMeta, safeStem } from '../src/core/document';
-import { extractBody } from '../src/core/exportBody';
+import { extractBody, PAGE_BREAK_BLOCK } from '../src/core/exportBody';
 import { autociteCommand, citeHeader, latexEscape, metaHeader, unmatchedCommand } from '../src/core/latex';
 import type { ExportResolver } from '../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../src/core/render';
@@ -156,6 +156,10 @@ describe('latex', () => {
 		expect(citeHeader(false, true)).toContain('\\DeclareRobustCommand{\\rdln}');
 		expect(citeHeader(false, true)).not.toContain('lineno');
 	});
+	it('defines \\rdpagebreak as \\clearpage only when page breaks are asked for', () => {
+		expect(citeHeader(false)).toContain('\\newcommand{\\rdpagebreak}{}');
+		expect(citeHeader(true, true, true)).toContain('\\newcommand{\\rdpagebreak}{\\clearpage}');
+	});
 	it('puts References on its own page under a centred heading', () => {
 		expect(citeHeader(true)).toContain('\\setlength{\\bibitemsep}{.67\\baselineskip}');
 		expect(citeHeader(true)).toContain('\\defbibheading{rdreferences}[\\refname]{\\section*{\\centering #1}');
@@ -178,6 +182,31 @@ describe('extractBody', () => {
 		const r = extractBody(doc);
 		expect(r.body).toBe(['First sentence.', 'continues here.', '', 'Second.'].join('\n'));
 		expect(r.outlineLinesStripped).toBe(3);
+	});
+	it('marks a page break before level-one headings past the first 15 lines below the frontmatter', () => {
+		// Below the frontmatter: line 1 "# Intro" (skipped), lines 2–15 filler, line 16 "# Second" (marked).
+		const filler = Array.from({ length: 14 }, (_, i) => `Line ${i + 2}.`);
+		const doc = ['---', 'a: 1', 'b: 2', '---', '# Intro', ...filler, '# Second', 'Text.', '## Sub', 'More.', '```', '# not a heading', '```', 'Prose', '# Third'].join('\n');
+		const body = extractBody(doc).body;
+		const marker = PAGE_BREAK_BLOCK.join('\n');
+		expect(body.startsWith('# Intro')).toBe(true);
+		expect(body).toContain(`Line 15.\n\n${marker}\n\n# Second`);
+		expect(body).toContain(`Prose\n\n${marker}\n\n# Third`);
+		expect(body.split(marker)).toHaveLength(3);
+	});
+	it('does not mark a level-one heading on line 15 below the frontmatter, however long the frontmatter', () => {
+		const lines = (headingAt: number) => [...Array.from({ length: headingAt - 1 }, (_, i) => `P${i + 1}.`), '# H', 'x'].join('\n');
+		expect(extractBody(lines(15)).body).not.toContain('rdpagebreak');
+		expect(extractBody(lines(16)).body).toContain('rdpagebreak');
+		const longFrontmatter = ['---', ...Array.from({ length: 20 }, (_, i) => `k${i}: v`), '---'].join('\n');
+		expect(extractBody(`${longFrontmatter}\n${lines(15)}`).body).not.toContain('rdpagebreak');
+	});
+	it('keeps the page-break mark in front of a heading that carries an Obsidian line number', async () => {
+		const doc = ['---', 't: 1', '---', ...Array.from({ length: 16 }, (_, i) => `P${i + 1}.`), '# Later', 'x'].join('\n');
+		const p = await prepareDocument(doc, 'P.md', '@', { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' }, new Map());
+		const marker = PAGE_BREAK_BLOCK.join('\n');
+		expect(p.markdown).toContain(`${marker}\n\n# Later`);
+		expect(p.numberedMarkdown).toContain(`${marker}\n\n# \`\\rdln{20}\`{=latex}Later`);
 	});
 	it('keeps sigil-like lines inside code fences', () => {
 		const doc = ['```', '@ not an entry', '```'].join('\n');

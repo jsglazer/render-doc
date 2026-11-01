@@ -282,3 +282,52 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(pdfText(join(folder, 'Paper.pdf'))).toContain('(Bonica, 2018: 123)');
 	});
 });
+
+// The page-break option end to end: a short note with a level-one heading at
+// the top (skipped) and one past line 15 (marked), rendered with the option
+// off and on. pdftotext separates pages with a form feed.
+describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => {
+	let tmp = '';
+	const NOTE_BREAKS = ['---', 'title: Breaks', '---', '# Opening', ...Array.from({ length: 16 }, (_, i) => `Sentence ${i + 1}.`), '# Later Section', 'Final words.'].join('\n');
+	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
+
+	async function render(name: string, pageBreaks: boolean): Promise<string[]> {
+		const buildDir = join(tmp, `build-${name}`);
+		const parentDir = join(tmp, `out-${name}`);
+		mkdirSync(join(buildDir, 'assets'), { recursive: true });
+		mkdirSync(parentDir);
+		const prepared = await prepareDocument(NOTE_BREAKS, 'Breaks.md', '@', resolver, new Map());
+		const { files, job } = buildFiles(
+			prepared,
+			readDocMeta({ title: 'Breaks' }, 'Breaks'),
+			{ resourcePath: FIXTURES, parentDir, folderName: 'Breaks', stem: 'Breaks', overwrite: false },
+			{ mode: 'dev', pageBreaks },
+		);
+		for (const [file, content] of Object.entries(files)) writeFileSync(join(buildDir, file), content, 'utf8');
+		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_DEV_PREAMBLE, 'utf8');
+		writeFileSync(join(buildDir, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
+		const status = await runRenderer(RENDERER, join(buildDir, 'job.json'), buildDir);
+		expect(status.ok).toBe(true);
+		return pdfText(join(parentDir, 'Breaks', 'Breaks.pdf')).split('\f').filter((p) => p.trim() !== '');
+	}
+
+	beforeAll(() => {
+		tmp = mkdtempSync(join(tmpdir(), 'render-doc-breaks-'));
+		process.env.RENDER_DOC_CACHE = join(tmp, 'cache');
+	});
+	afterAll(() => {
+		delete process.env.RENDER_DOC_CACHE;
+		if (tmp !== '') rmSync(tmp, { recursive: true, force: true });
+	});
+
+	it('starts the later # heading on a new page only when asked, never the opening one', async () => {
+		const off = await render('off', false);
+		expect(off).toHaveLength(1);
+		const on = await render('on', true);
+		expect(on).toHaveLength(2);
+		expect(on[0]).toContain('Opening');
+		expect(on[0]).toContain('Sentence 16.');
+		expect(on[0]).not.toContain('Later Section');
+		expect(on[1]).toContain('Later Section');
+	}, 300_000);
+});

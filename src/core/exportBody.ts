@@ -21,6 +21,17 @@ const MAX_LEVEL = 6;
 
 const FENCE_RE = /^\s*(`{3,}|~{3,})/;
 
+// The page-break option (render dialog): every level-one heading (`# Title`)
+// gets a raw-LaTeX \rdpagebreak in front of it, except one within the first
+// PAGE_BREAK_SKIP_LINES lines of the note (counted below the frontmatter), so
+// an opening heading never leaves the title alone on page 1. The marker is
+// always written; cite.tex defines \rdpagebreak as \clearpage when the option
+// is on and as nothing when it is off, so the dialog toggle needs no re-render
+// of the body. Headings pulled in by an embed are not lines of this note.
+export const PAGE_BREAK_SKIP_LINES = 15;
+const LEVEL_ONE_HEADING_RE = /^#[ \t]+\S/;
+export const PAGE_BREAK_BLOCK = ['```{=latex}', '\\rdpagebreak', '```'];
+
 // A code fence opens with ``` or ~~~ and closes with the same character run
 // at least as long. Returns the open fence marker, or null outside a fence.
 export function nextFenceState(line: string, open: string | null): string | null {
@@ -95,7 +106,7 @@ export function extractBody(doc: string, sigilChar: string = DEFAULT_SIGIL_CHAR)
 	let dropped = false; // an entry line was removed since the last body line
 	let forceBreak = false; // …and at least one of them carried the flag
 
-	for (const line of lines) {
+	for (const [index, line] of lines.entries()) {
 		if (fence === null && entryRe.test(line)) {
 			stripped++;
 			dropped = true;
@@ -119,6 +130,10 @@ export function extractBody(doc: string, sigilChar: string = DEFAULT_SIGIL_CHAR)
 			continue;
 		}
 		if (blank && lastBlank) continue;
+		if (LEVEL_ONE_HEADING_RE.test(line) && index >= PAGE_BREAK_SKIP_LINES) {
+			if (!lastBlank) out.push('');
+			out.push(...PAGE_BREAK_BLOCK, '');
+		}
 		out.push(blank ? '' : line);
 		lastBlank = blank;
 		if (!blank) lastText = line;

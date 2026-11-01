@@ -311,6 +311,9 @@ var PARAGRAPH_FLAG = "p";
 var COMMENT_MARK = "%";
 var MAX_LEVEL = 6;
 var FENCE_RE = /^\s*(`{3,}|~{3,})/;
+var PAGE_BREAK_SKIP_LINES = 15;
+var LEVEL_ONE_HEADING_RE = /^#[ \t]+\S/;
+var PAGE_BREAK_BLOCK = ["```{=latex}", "\\rdpagebreak", "```"];
 function nextFenceState(line, open) {
   var _a;
   const m = FENCE_RE.exec(line);
@@ -365,7 +368,7 @@ function extractBody(doc, sigilChar = DEFAULT_SIGIL_CHAR) {
   let lastText = "";
   let dropped = false;
   let forceBreak = false;
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (fence === null && entryRe.test(line)) {
       stripped++;
       dropped = true;
@@ -388,6 +391,10 @@ function extractBody(doc, sigilChar = DEFAULT_SIGIL_CHAR) {
       continue;
     }
     if (blank && lastBlank) continue;
+    if (LEVEL_ONE_HEADING_RE.test(line) && index >= PAGE_BREAK_SKIP_LINES) {
+      if (!lastBlank) out.push("");
+      out.push(...PAGE_BREAK_BLOCK, "");
+    }
     out.push(blank ? "" : line);
     lastBlank = blank;
     if (!blank) lastText = line;
@@ -511,8 +518,11 @@ var LINE_NUMBERS = [
   "\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdln\\@gobble}\\fi",
   "\\makeatother"
 ];
-function citeHeader(withBibliography, lineNumbers = false) {
-  const lines = ["% Written by Render Doc \u2014 included AFTER the preamble.", ...UNMATCHED_MACRO];
+function pageBreakMacro(pageBreaks) {
+  return `\\newcommand{\\rdpagebreak}{${pageBreaks ? "\\clearpage" : ""}}`;
+}
+function citeHeader(withBibliography, lineNumbers = false, pageBreaks = false) {
+  const lines = ["% Written by Render Doc \u2014 included AFTER the preamble.", ...UNMATCHED_MACRO, pageBreakMacro(pageBreaks)];
   if (withBibliography) lines.push(...BIBLATEX);
   if (lineNumbers) lines.push(...LINE_NUMBERS);
   return `${lines.join("\n")}
@@ -1045,14 +1055,14 @@ async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
 var PREAMBLE_FILE = "preamble.tex";
 var BIB_FILE = "refs.bib";
 function buildFiles(prepared, meta, target, options = {}) {
-  var _a;
+  var _a, _b;
   const cites = prepared.citations.citekeys.length > 0;
   const numbered = options.lineNumbers === true && lineNumbersAllowed((_a = options.mode) != null ? _a : "dev");
   const files = {
     "source.md": `${numbered ? prepared.numberedMarkdown : prepared.markdown}
 `,
     "meta.tex": metaHeader(meta),
-    "cite.tex": citeHeader(cites, numbered),
+    "cite.tex": citeHeader(cites, numbered, (_b = options.pageBreaks) != null ? _b : false),
     "meta.json": `${JSON.stringify(pandocMetadata(meta), null, 2)}
 `
   };
@@ -1608,7 +1618,8 @@ var RenderExporter = class {
       overwrite: false,
       lineNumbers: options.lineNumbers,
       mode: options.mode,
-      openFolder: options.openFolder
+      openFolder: options.openFolder,
+      pageBreaks: false
     };
   }
   check(plan) {
@@ -1664,7 +1675,7 @@ var RenderExporter = class {
         stem: plan.stem,
         overwrite: plan.overwrite
       },
-      { lineNumbers: plan.lineNumbers, mode: plan.mode }
+      { lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks }
     );
     for (const [name, content] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(buildDir, name), content, "utf8");
@@ -1746,6 +1757,11 @@ var RenderModal = class extends import_obsidian2.Modal {
       })
     ).settingEl;
     this.showMode();
+    new import_obsidian2.Setting(contentEl).setName("Page break before # headings").setDesc(`Start each level-one heading (# Heading) on a new page, except one in the first ${PAGE_BREAK_SKIP_LINES} lines below the frontmatter.`).addToggle(
+      (t) => t.setValue(plan.pageBreaks).onChange((v) => {
+        plan.pageBreaks = v;
+      })
+    );
     new import_obsidian2.Setting(contentEl).setName("Open export folder").setDesc("Show the new PDF in Finder when rendering finishes.").addToggle(
       (t) => t.setValue(plan.openFolder).onChange((v) => {
         plan.openFolder = v;

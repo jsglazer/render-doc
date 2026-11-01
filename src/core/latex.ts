@@ -7,7 +7,8 @@
 //                     \providecommand defaults leave them alone
 //   -H preamble.tex   the Dev or Submit preamble from the settings page
 //   -H cite.tex       \rdunmatched always; biblatex only when the note cites;
-//                     \rdln (Obsidian line numbers) only when the dialog asked
+//                     \rdln (Obsidian line numbers) only when the dialog asked;
+//                     \rdpagebreak always, \clearpage only when the dialog asked
 //   -A after.tex      References on a page of its own, only when the note cites
 //
 // No pandoc --biblatex or --citeproc: the body already carries raw \autocite
@@ -125,8 +126,15 @@ const LINE_NUMBERS = [
 	'\\makeatother',
 ];
 
-export function citeHeader(withBibliography: boolean, lineNumbers = false): string {
-	const lines = ['% Written by Render Doc — included AFTER the preamble.', ...UNMATCHED_MACRO];
+// The body puts \rdpagebreak before each level-one heading past the note's
+// opening lines (src/core/exportBody.ts); the dialog's "Page break before
+// # headings" toggle decides whether it starts a new page.
+export function pageBreakMacro(pageBreaks: boolean): string {
+	return `\\newcommand{\\rdpagebreak}{${pageBreaks ? '\\clearpage' : ''}}`;
+}
+
+export function citeHeader(withBibliography: boolean, lineNumbers = false, pageBreaks = false): string {
+	const lines = ['% Written by Render Doc — included AFTER the preamble.', ...UNMATCHED_MACRO, pageBreakMacro(pageBreaks)];
 	if (withBibliography) lines.push(...BIBLATEX);
 	if (lineNumbers) lines.push(...LINE_NUMBERS);
 	return `${lines.join('\n')}\n`;

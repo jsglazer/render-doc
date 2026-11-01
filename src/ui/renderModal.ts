@@ -4,7 +4,8 @@
 // disables Render — and a summary: source notes found, citations resolved,
 // citations left highlighted, with every warning. A Dev/Submit selector and a
 // line-numbers toggle, both remembered between renders. The toggle is Dev
-// only: Submit never prints line numbers, so it is hidden there. No font size.
+// only: Submit never prints line numbers, so it is hidden there. A
+// page-break toggle (both modes) that always opens off. No font size.
 //
 // The title sits in an alert box: yellow for Dev, red for Submit, so a
 // working draft is hard to mistake for the copy being handed in.
@@ -14,6 +15,7 @@ import { Modal, Setting } from 'obsidian';
 
 import type { TargetCheck } from '../core/document';
 import { folderNameFor } from '../core/document';
+import { PAGE_BREAK_SKIP_LINES } from '../core/exportBody';
 import type { RenderMode } from '../core/settings';
 import { lineNumbersAllowed } from '../core/settings';
 import type { RenderPlan } from '../export/exporter';
@@ -105,6 +107,15 @@ export class RenderModal extends Modal {
 				}),
 			).settingEl;
 		this.showMode();
+
+		new Setting(contentEl)
+			.setName('Page break before # headings')
+			.setDesc(`Start each level-one heading (# Heading) on a new page, except one in the first ${PAGE_BREAK_SKIP_LINES} lines below the frontmatter.`)
+			.addToggle((t) =>
+				t.setValue(plan.pageBreaks).onChange((v) => {
+					plan.pageBreaks = v;
+				}),
+			);
 
 		new Setting(contentEl)
 			.setName('Open export folder')
