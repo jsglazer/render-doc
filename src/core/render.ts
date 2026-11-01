@@ -13,8 +13,8 @@ import { BIBLIOGRAPHY_TRAILER, citeHeader, metaHeader } from './latex';
 import { markersToLatex, markSourceLines, stripMarkers } from './lineMarkers';
 import type { ConversionIssue, ExportResolver } from './obsidianMarkdown';
 import { toPandocMarkdown } from './obsidianMarkdown';
-import type { RenderMode } from './settings';
-import { lineNumbersAllowed } from './settings';
+import type { FontSize, RenderMode } from './settings';
+import { DEFAULT_FONT_SIZE, documentClassFor, lineNumbersAllowed } from './settings';
 import type { CiteIndex } from './sources';
 
 export interface PreparedDocument {
@@ -63,6 +63,8 @@ export interface RenderJob {
 	folderName: string;
 	stem: string; // <stem>.pdf and <stem>.tex in the export folder
 	overwrite: boolean; // the dialog warned that the folder exists and Josh rendered anyway
+	fontSize: number; // body size in pt, pandoc -V fontsize
+	documentClass: string; // pandoc -V documentclass: article, or extarticle for sizes article lacks
 }
 
 export interface BuildFiles {
@@ -80,9 +82,10 @@ export function buildFiles(
 	prepared: PreparedDocument,
 	meta: DocMeta,
 	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
-	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean; hideUnmatched?: boolean } = {},
+	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean; hideUnmatched?: boolean; fontSize?: FontSize } = {},
 ): BuildFiles {
 	const cites = prepared.citations.citekeys.length > 0;
+	const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
 	const numbered = options.lineNumbers === true && lineNumbersAllowed(options.mode ?? 'dev');
 	const files: Record<string, string> = {
 		'source.md': `${numbered ? prepared.numberedMarkdown : prepared.markdown}\n`,
@@ -99,6 +102,8 @@ export function buildFiles(
 		metadataFile: 'meta.json',
 		bibliography: cites ? BIB_FILE : '',
 		...target,
+		fontSize,
+		documentClass: documentClassFor(fontSize),
 	};
 	return { files, job };
 }

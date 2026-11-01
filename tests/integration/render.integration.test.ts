@@ -19,6 +19,7 @@ import { readDocMeta } from '../../src/core/document';
 import type { ExportResolver } from '../../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../../src/core/render';
 import type { PreparedDocument } from '../../src/core/render';
+import type { FontSize } from '../../src/core/settings';
 import { DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE } from '../../src/core/preambles';
 import { discoverSources } from '../../src/core/sources';
 import { SEARCH_PATH } from '../../src/export/node';
@@ -291,7 +292,7 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 	const NOTE_BREAKS = ['---', 'title: Breaks', '---', '# Opening', ...Array.from({ length: 16 }, (_, i) => `Sentence ${i + 1}.`), '# Later Section', 'Final words with an unmatched cite (Jones, 2015).'].join('\n');
 	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
 
-	async function render(name: string, pageBreaks: boolean, hideUnmatched = false): Promise<string[]> {
+	async function render(name: string, pageBreaks: boolean, hideUnmatched = false, fontSize: FontSize = 12): Promise<string[]> {
 		const buildDir = join(tmp, `build-${name}`);
 		const parentDir = join(tmp, `out-${name}`);
 		mkdirSync(join(buildDir, 'assets'), { recursive: true });
@@ -301,7 +302,7 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 			prepared,
 			readDocMeta({ title: 'Breaks' }, 'Breaks'),
 			{ resourcePath: FIXTURES, parentDir, folderName: 'Breaks', stem: 'Breaks', overwrite: false },
-			{ mode: 'dev', pageBreaks, hideUnmatched },
+			{ mode: 'dev', pageBreaks, hideUnmatched, fontSize },
 		);
 		for (const [file, content] of Object.entries(files)) writeFileSync(join(buildDir, file), content, 'utf8');
 		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_DEV_PREAMBLE, 'utf8');
@@ -338,5 +339,16 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 		expect(tex).toContain('\\newcommand{\\rdunmatched}[1]{#1}');
 		expect(tex).not.toContain('\\highLight[yellow!40]');
 		expect(tex).toContain('\\rdunmatched{(Jones, 2015)}');
+	}, 300_000);
+
+	it('typesets at the chosen font size, using extarticle for sizes article lacks', async () => {
+		const ten = await render('size10', false, false, 10);
+		expect(ten).toHaveLength(1);
+		expect(readFileSync(join(tmp, 'out-size10', 'Breaks', 'Breaks.tex'), 'utf8')).toMatch(/\\documentclass\[[^\]]*10pt[^\]]*\]\{article\}/);
+		const big = await render('size20', false, false, 20);
+		expect(readFileSync(join(tmp, 'out-size20', 'Breaks', 'Breaks.tex'), 'utf8')).toMatch(/\\documentclass\[[^\]]*20pt[^\]]*\]\{extarticle\}/);
+		// The same paragraph wraps onto more lines at 20 pt than at 10 pt.
+		const lines = (pages: string[]): number => pages.join('\n').split('\n').filter((l) => l.trim() !== '').length;
+		expect(lines(big)).toBeGreaterThan(lines(ten));
 	}, 300_000);
 });

@@ -25,7 +25,7 @@ import { DEFAULT_SIGIL_CHAR } from '../core/exportBody';
 import type { ExportResolver } from '../core/obsidianMarkdown';
 import type { PreparedDocument } from '../core/render';
 import { BIB_FILE, buildFiles, prepareDocument, PREAMBLE_FILE } from '../core/render';
-import type { RenderMode } from '../core/settings';
+import type { FontSize, RenderMode } from '../core/settings';
 import type { NoteMeta, SourceDiscovery } from '../core/sources';
 import { CITE_SOURCES_KEY, discoverSources } from '../core/sources';
 import { fetchBibLaTeX } from '../core/zotero';
@@ -56,6 +56,8 @@ export interface RenderPlan {
 	pageBreaks: boolean;
 	// Edited by the dialog: print unmatched citations unshaded. Not remembered.
 	hideUnmatched: boolean;
+	// Edited by the dialog: body font size in pt. Opens on the settings default.
+	fontSize: FontSize;
 }
 
 export interface PlanOptions {
@@ -63,6 +65,7 @@ export interface PlanOptions {
 	lineNumbers: boolean;
 	mode: RenderMode;
 	openFolder: boolean;
+	fontSize: FontSize;
 	defaultAuthor: string;
 }
 
@@ -135,6 +138,7 @@ export class RenderExporter {
 			openFolder: options.openFolder,
 			pageBreaks: false,
 			hideUnmatched: false,
+			fontSize: options.fontSize,
 		};
 	}
 
@@ -197,7 +201,7 @@ export class RenderExporter {
 				stem: plan.stem,
 				overwrite: plan.overwrite,
 			},
-			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched },
+			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize },
 		);
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');

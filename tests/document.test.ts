@@ -6,7 +6,7 @@ import { autociteCommand, citeHeader, latexEscape, metaHeader, unmatchedCommand 
 import type { ExportResolver } from '../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../src/core/render';
 import { DEFAULT_DEV_PREAMBLE, DEFAULT_SUBMIT_PREAMBLE, preambleFingerprint, RETIRED_DEFAULT_FINGERPRINTS } from '../src/core/preambles';
-import { initialParentDir, mergeSettings, preambleFor, settingsToSave } from '../src/core/settings';
+import { documentClassFor, initialParentDir, mergeSettings, preambleFor, settingsToSave } from '../src/core/settings';
 import type { CitationEntry } from '../src/core/sources';
 
 describe('readDocMeta', () => {
@@ -98,6 +98,15 @@ describe('settings', () => {
 		expect(mergeSettings({ submitPreamble: '% mine' }).submitPreamble).toBe('% mine');
 		expect(s.openFolder).toBe(false);
 		expect(mergeSettings({ openFolder: true }).openFolder).toBe(true);
+	});
+	it('defaults the font size to 12 pt and keeps only sizes LaTeX offers', () => {
+		expect(mergeSettings(undefined).fontSize).toBe(12);
+		expect(mergeSettings({ fontSize: 14 }).fontSize).toBe(14);
+		expect(mergeSettings({ fontSize: 13 }).fontSize).toBe(12);
+		expect(mergeSettings({ fontSize: '11' }).fontSize).toBe(12);
+		expect(documentClassFor(11)).toBe('article');
+		expect(documentClassFor(9)).toBe('extarticle');
+		expect(documentClassFor(17)).toBe('extarticle');
 	});
 	it('saves default preambles empty, and treats a saved old default as the current one', () => {
 		const saved = settingsToSave(mergeSettings({ submitPreamble: '% mine' }));

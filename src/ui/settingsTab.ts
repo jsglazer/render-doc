@@ -1,10 +1,11 @@
-// The settings page (Update000): default author, default parent folder, and
-// the Dev and Submit LaTeX preambles, which replaced reading LatexPre.tex.
+// The settings page (Update000): default author, default parent folder,
+// default font size (Update002), and the Dev and Submit LaTeX preambles,
+// which replaced reading LatexPre.tex.
 
 import type { App, Plugin } from 'obsidian';
 import { PluginSettingTab, Setting } from 'obsidian';
 
-import { DEFAULT_SETTINGS } from '../core/settings';
+import { DEFAULT_SETTINGS, FONT_SIZES, isFontSize } from '../core/settings';
 import type { RenderDocSettings } from '../core/settings';
 
 export interface SettingsHost extends Plugin {
@@ -58,6 +59,19 @@ export class RenderDocSettingTab extends PluginSettingTab {
 					await host.saveSettings();
 				}),
 			);
+
+		new Setting(containerEl)
+			.setName('Default font size')
+			.setDesc('Body text size the render dialog opens on. You can change it in the dialog for a single render.')
+			.addDropdown((d) => {
+				for (const size of FONT_SIZES) d.addOption(String(size), `${size} pt`);
+				d.setValue(String(host.settings.fontSize)).onChange(async (v) => {
+					const size = Number(v);
+					if (!isFontSize(size)) return;
+					host.settings.fontSize = size;
+					await host.saveSettings();
+				});
+			});
 
 		new Setting(containerEl).setName('LaTeX preambles').setHeading();
 		containerEl.createEl('p', {

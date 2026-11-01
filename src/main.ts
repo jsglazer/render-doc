@@ -71,6 +71,7 @@ export default class RenderDocPlugin extends Plugin {
 			lineNumbers: this.settings.lineNumbers,
 			mode: this.settings.mode,
 			openFolder: this.settings.openFolder,
+			fontSize: this.settings.fontSize,
 			defaultAuthor: this.settings.defaultAuthor,
 		});
 		if (typeof plan === 'string') {

@@ -75,7 +75,7 @@ args=(
   --extract-media=media
   --resource-path="$BUILD:$JOB_RESOURCE_PATH"
   --metadata-file="$JOB_METADATA"
-  -V fontsize=12pt -V papersize=letter
+  -V fontsize="${JOB_FONTSIZE}pt" -V documentclass="$JOB_DOCCLASS" -V papersize=letter
 )
 for header in "${(@ps:\n:)JOB_HEADERS}"; do
   [[ -n $header ]] && args+=(-H "$header")

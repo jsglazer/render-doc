@@ -21,6 +21,24 @@ export interface RenderDocSettings {
 	mode: RenderMode;
 	// The dialog's "Open export folder" toggle last time; off until turned on.
 	openFolder: boolean;
+	// Body font size in points (Update002). The render dialog opens on it and
+	// can change it for one render without changing this default.
+	fontSize: FontSize;
+}
+
+// The sizes LaTeX offers: article has 10, 11 and 12 pt; extsizes'
+// extarticle adds the rest (Update002).
+export const FONT_SIZES = [8, 9, 10, 11, 12, 14, 17, 20] as const;
+export type FontSize = (typeof FONT_SIZES)[number];
+export const DEFAULT_FONT_SIZE: FontSize = 12;
+
+export function isFontSize(value: unknown): value is FontSize {
+	return typeof value === 'number' && (FONT_SIZES as readonly number[]).includes(value);
+}
+
+// The document class pandoc uses: plain article where it has the size.
+export function documentClassFor(size: FontSize): string {
+	return size === 10 || size === 11 || size === 12 ? 'article' : 'extarticle';
 }
 
 export const DEFAULT_PARENT_DIR = '~/Library/CloudStorage/Dropbox/_Schar/Classes';
@@ -33,6 +51,7 @@ export const DEFAULT_SETTINGS: RenderDocSettings = {
 	lineNumbers: false,
 	mode: 'dev',
 	openFolder: false,
+	fontSize: DEFAULT_FONT_SIZE,
 };
 
 function text(value: unknown, fallback: string): string {
@@ -66,6 +85,7 @@ export function mergeSettings(saved: unknown): RenderDocSettings {
 		lineNumbers: typeof s.lineNumbers === 'boolean' ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
 		mode: s.mode === 'submit' ? 'submit' : 'dev',
 		openFolder: typeof s.openFolder === 'boolean' ? s.openFolder : DEFAULT_SETTINGS.openFolder,
+		fontSize: isFontSize(s.fontSize) ? s.fontSize : DEFAULT_SETTINGS.fontSize,
 	};
 }
 

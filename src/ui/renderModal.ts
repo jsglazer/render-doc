@@ -6,7 +6,8 @@
 // line-numbers toggle, both remembered between renders. The toggle is Dev
 // only: Submit never prints line numbers, so it is hidden there. A
 // page-break toggle and a hide-citation-alerts toggle (both modes) that
-// always open off. No font size.
+// always open off. A font-size dropdown that opens on the settings default
+// and changes only this render (Update002).
 //
 // The title sits in an alert box: yellow for Dev, red for Submit, so a
 // working draft is hard to mistake for the copy being handed in.
@@ -18,7 +19,7 @@ import type { TargetCheck } from '../core/document';
 import { folderNameFor } from '../core/document';
 import { PAGE_BREAK_SKIP_LINES } from '../core/exportBody';
 import type { RenderMode } from '../core/settings';
-import { lineNumbersAllowed } from '../core/settings';
+import { FONT_SIZES, isFontSize, lineNumbersAllowed } from '../core/settings';
 import type { RenderPlan } from '../export/exporter';
 
 export interface RenderModalHooks {
@@ -65,6 +66,17 @@ export class RenderModal extends Modal {
 						this.refresh();
 					}),
 			);
+
+		new Setting(contentEl)
+			.setName('Font size')
+			.setDesc('Body text size for this render. The default is set on the settings page.')
+			.addDropdown((d) => {
+				for (const size of FONT_SIZES) d.addOption(String(size), `${size} pt`);
+				d.setValue(String(plan.fontSize)).onChange((v) => {
+					const size = Number(v);
+					if (isFontSize(size)) plan.fontSize = size;
+				});
+			});
 
 		new Setting(contentEl)
 			.setName('Parent folder')

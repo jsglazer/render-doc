@@ -15,7 +15,9 @@ build folder holding job.json plus the files it names (all build-relative):
       "parentDir": "/abs/parent",    # the export folder is created inside it
       "folderName": "Paper",
       "stem": "Paper",               # <stem>.pdf and <stem>.tex in the export folder
-      "overwrite": false             # write into an existing export folder (the dialog warned)
+      "overwrite": false,            # write into an existing export folder (the dialog warned)
+      "fontSize": 12,                # body size in pt (pandoc -V fontsize); default 12
+      "documentClass": "article"     # pandoc -V documentclass; extarticle for 8/9/14/17/20 pt
     }
 
 Subcommands:
@@ -97,6 +99,8 @@ def cmd_env(job_path):
         "JOB_BIBLIOGRAPHY": bibliography,
         "JOB_HEADING_SHIFT": str(shift),
         "JOB_RESOURCE_PATH": job.get("resourcePath") or build,
+        "JOB_FONTSIZE": str(int(job.get("fontSize") or 12)),
+        "JOB_DOCCLASS": job.get("documentClass") or "article",
     }
     for key, value in values.items():
         print("%s=%s" % (key, shlex.quote(value)))
