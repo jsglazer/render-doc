@@ -486,9 +486,25 @@ function metaHeader(meta) {
     ""
   ].join("\n");
 }
-var UNMATCHED_PACKAGES = ["\\usepackage{xcolor}", "\\usepackage{luacolor}", "\\usepackage{lua-ul}"];
 function unmatchedMacro(hide) {
   return `\\newcommand{\\rdunmatched}[1]{${hide ? "#1" : "\\highLight[yellow!40]{#1}"}}`;
+}
+function unmatchedBlock(hide) {
+  if (hide) return ["\\usepackage{xcolor}", unmatchedMacro(true)];
+  return [
+    "\\usepackage{xcolor}",
+    "\\usepackage{iftex}",
+    "\\ifLuaTeX",
+    "  \\usepackage{luacolor}",
+    "  \\usepackage{lua-ul}",
+    `  ${unmatchedMacro(false)}`,
+    "\\else % pdfLaTeX or XeLaTeX: soul highlight instead of lua-ul",
+    "  \\usepackage{soul}",
+    "  \\colorlet{rdunmatchedbg}{yellow!40}",
+    "  \\sethlcolor{rdunmatchedbg}",
+    "  \\newcommand{\\rdunmatched}[1]{\\hl{#1}}",
+    "\\fi"
+  ];
 }
 var BIBLATEX = [
   "\\usepackage{csquotes}",
@@ -533,8 +549,7 @@ function citeHeader(withBibliography, options = {}) {
   var _a, _b;
   const lines = [
     "% Written by Render Doc \u2014 included AFTER the preamble.",
-    ...UNMATCHED_PACKAGES,
-    unmatchedMacro((_a = options.hideUnmatched) != null ? _a : false),
+    ...unmatchedBlock((_a = options.hideUnmatched) != null ? _a : false),
     pageBreakMacro((_b = options.pageBreaks) != null ? _b : false)
   ];
   if (withBibliography) lines.push(...BIBLATEX);
@@ -1250,7 +1265,126 @@ if __name__ == '__main__':
 `;
 
 // renderer/render-pdf.sh
-var render_pdf_default = '#!/bin/zsh\n# render-pdf.sh \u2014 typeset one prepared build folder and deliver the export folder.\n#\n#   zsh render-pdf.sh --job /path/to/build/job.json\n#\n# Copied and simplified from virtual-outliner\'s renderer/render-pdf.sh. The\n# build folder is the folder holding job.json; the plugin has already written\n# source.md, meta.tex, preamble.tex (LatexPre.tex, staged by stream copy),\n# cite.tex, after.tex, meta.json and refs.bib there. job.py documents job.json.\n#\n# Pipeline: table widths -> list breaks -> pandoc to a standalone doc.tex\n# (preamble inlined via -H, images extracted to media/) -> sanitize/optimize\n# media -> table row lines -> latexmk -lualatex (runs biber) -> job.py deliver,\n# which creates <parentDir>/<folderName> with a non-recursive mkdir (or, when\n# the job says "overwrite", reuses the existing folder) and copies ONLY\n# <stem>.pdf, <stem>.tex, refs.bib and media/ into it. Every latexmk/biber\n# intermediate stays in the build folder.\n#\n# The LAST line on stdout is always one JSON status object, which is what the\n# plugin parses: {"ok":true,"output":\u2026} or {"ok":false,"stage":\u2026,"message":\u2026}.\n# Everything else goes to render.log in the build folder.\n#\n# Run with /bin/zsh explicitly: sync services drop the executable bit, so\n# nothing here relies on it.\n\nemulate -L zsh\nsetopt no_nomatch pipe_fail\nset -u\n\nHERE=${0:A:h}\nexport PATH=/opt/homebrew/bin:/usr/local/bin:/Library/TeX/texbin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}\n\nJOB=""\nwhile (( $# )); do\n  case $1 in\n    --job) JOB=${2:-}; shift 2 ;;\n    *) shift ;;\n  esac\ndone\n\nPY=python3\n(( $+commands[python3] )) || PY=/usr/bin/python3\n\nfail_json() {\n  # stage, message\n  "$PY" "$HERE/job.py" status-fail "$1" "$2" 2>/dev/null \\\n    || print -r -- \'{"ok":false,"stage":"\'"$1"\'","message":"renderer failure"}\'\n  exit 1\n}\n\n[[ -n $JOB && -f $JOB ]] || fail_json args "No job file given (expected --job <job.json>)."\nJOB=${JOB:A}\nBUILD=${JOB:h}\ncd "$BUILD" || fail_json args "Cannot enter build folder $BUILD"\n\nLOG="$BUILD/render.log"\nsource "$HERE/lib.sh"\nrm -rf media doc.* work*.md pandoc.out latexmk.out rd.latexmkrc\nlog "=== render $JOB"\n\nfor tool in pandoc latexmk lualatex biber; do\n  (( $+commands[$tool] )) || fail_json tools "$tool was not found. Install pandoc and MacTeX (latexmk, lualatex, biber)."\ndone\n\n# Shell assignments for the job\'s fields (values shell-quoted by job.py).\nENV_OUT=$("$PY" "$HERE/job.py" env "$JOB" 2>>"$LOG") || fail_json job "$(tail -3 "$LOG")"\neval "$ENV_OUT"\n\n"$PY" "$HERE/tables.py" "$JOB_SOURCE" work-tables.md 2>>"$LOG" || cp "$JOB_SOURCE" work-tables.md\n"$PY" "$HERE/lists.py" work-tables.md work-final.md 2>>"$LOG" || cp work-tables.md work-final.md\n\nargs=(\n  -f markdown+mark\n  -t latex -s -o doc.tex\n  --extract-media=media\n  --resource-path="$BUILD:$JOB_RESOURCE_PATH"\n  --metadata-file="$JOB_METADATA"\n  -V fontsize="${JOB_FONTSIZE}pt" -V documentclass="$JOB_DOCCLASS" -V papersize=letter\n)\nfor header in "${(@ps:\\n:)JOB_HEADERS}"; do\n  [[ -n $header ]] && args+=(-H "$header")\ndone\n[[ -n $JOB_AFTER ]] && args+=(-A "$JOB_AFTER")\n(( JOB_HEADING_SHIFT )) && args+=(--shift-heading-level-by="$JOB_HEADING_SHIFT")\n\nlog "  pandoc ${args[*]}"\nif ! pandoc work-final.md "${args[@]}" >pandoc.out 2>&1; then\n  cat pandoc.out >>"$LOG"\n  fail_json pandoc "$(tail -15 pandoc.out)"\nfi\n[[ -s pandoc.out ]] && cat pandoc.out >>"$LOG"\n\nrenames=$(sanitize_media media)\nif [[ -n $renames ]]; then\n  while IFS=$\'\\t\' read -r old new; do\n    [[ -n $old ]] || continue\n    LC_ALL=C sed -i \'\' "s|media/${old}|media/${new}|g" doc.tex\n  done <<< "$renames"\nfi\noptimize_media media\n"$PY" "$HERE/rowlines.py" doc.tex >>"$LOG" 2>&1\n\nlatexmk_args=(-lualatex -interaction=nonstopmode -halt-on-error -file-line-error)\nif [[ -n $JOB_BIBLIOGRAPHY ]]; then\n  BIBER=$(resolve_biber) || fail_json tools "biber is installed but will not run on this Mac. See $LOG."\n  log "  biber: $BIBER"\n  print -r -- "\\$biber = q{\\"$BIBER\\" %O %S};" > rd.latexmkrc\n  latexmk_args+=(-r rd.latexmkrc)\nfi\n\nlog "  latexmk ${latexmk_args[*]}"\nif ! latexmk "${latexmk_args[@]}" doc.tex >latexmk.out 2>&1; then\n  fail_json latex "$("$PY" "$HERE/job.py" latex-errors doc.log doc.blg 2>/dev/null)"\nfi\n\n"$PY" "$HERE/job.py" deliver "$JOB" 2>>"$LOG"\n';
+var render_pdf_default = `#!/bin/zsh
+# render-pdf.sh \u2014 typeset one prepared build folder and deliver the export folder.
+#
+#   zsh render-pdf.sh --job /path/to/build/job.json
+#
+# Copied and simplified from virtual-outliner's renderer/render-pdf.sh. The
+# build folder is the folder holding job.json; the plugin has already written
+# source.md, meta.tex, preamble.tex (LatexPre.tex, staged by stream copy),
+# cite.tex, after.tex, meta.json and refs.bib there. job.py documents job.json.
+#
+# Pipeline: table widths -> list breaks -> pandoc to a standalone doc.tex
+# (preamble inlined via -H, images extracted to media/) -> sanitize/optimize
+# media -> table row lines -> latexmk -lualatex (runs biber) -> job.py deliver,
+# which creates <parentDir>/<folderName> with a non-recursive mkdir (or, when
+# the job says "overwrite", reuses the existing folder) and copies ONLY
+# <stem>.pdf, <stem>.tex, refs.bib and media/ into it. Every latexmk/biber
+# intermediate stays in the build folder.
+#
+# The LAST line on stdout is always one JSON status object, which is what the
+# plugin parses: {"ok":true,"output":\u2026} or {"ok":false,"stage":\u2026,"message":\u2026}.
+# Everything else goes to render.log in the build folder.
+#
+# Run with /bin/zsh explicitly: sync services drop the executable bit, so
+# nothing here relies on it.
+
+emulate -L zsh
+setopt no_nomatch pipe_fail
+set -u
+
+HERE=\${0:A:h}
+export PATH=/opt/homebrew/bin:/usr/local/bin:/Library/TeX/texbin:/usr/bin:/bin:/usr/sbin:/sbin:\${PATH:-}
+
+JOB=""
+while (( $# )); do
+  case $1 in
+    --job) JOB=\${2:-}; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+PY=python3
+(( $+commands[python3] )) || PY=/usr/bin/python3
+
+fail_json() {
+  # stage, message
+  "$PY" "$HERE/job.py" status-fail "$1" "$2" 2>/dev/null \\
+    || print -r -- '{"ok":false,"stage":"'"$1"'","message":"renderer failure"}'
+  exit 1
+}
+
+[[ -n $JOB && -f $JOB ]] || fail_json args "No job file given (expected --job <job.json>)."
+JOB=\${JOB:A}
+BUILD=\${JOB:h}
+cd "$BUILD" || fail_json args "Cannot enter build folder $BUILD"
+
+LOG="$BUILD/render.log"
+source "$HERE/lib.sh"
+rm -rf media doc.* work*.md pandoc.out latexmk.out rd.latexmkrc
+log "=== render $JOB"
+
+for tool in pandoc latexmk lualatex biber; do
+  (( $+commands[$tool] )) || fail_json tools "$tool was not found. Install pandoc and MacTeX (latexmk, lualatex, biber)."
+done
+
+# Shell assignments for the job's fields (values shell-quoted by job.py).
+ENV_OUT=$("$PY" "$HERE/job.py" env "$JOB" 2>>"$LOG") || fail_json job "$(tail -3 "$LOG")"
+eval "$ENV_OUT"
+
+"$PY" "$HERE/tables.py" "$JOB_SOURCE" work-tables.md 2>>"$LOG" || cp "$JOB_SOURCE" work-tables.md
+"$PY" "$HERE/lists.py" work-tables.md work-final.md 2>>"$LOG" || cp work-tables.md work-final.md
+
+args=(
+  -f markdown+mark
+  -t latex -s -o doc.tex
+  --extract-media=media
+  --resource-path="$BUILD:$JOB_RESOURCE_PATH"
+  --metadata-file="$JOB_METADATA"
+  -V fontsize="\${JOB_FONTSIZE}pt" -V documentclass="$JOB_DOCCLASS" -V papersize=letter
+)
+for header in "\${(@ps:\\n:)JOB_HEADERS}"; do
+  [[ -n $header ]] && args+=(-H "$header")
+done
+[[ -n $JOB_AFTER ]] && args+=(-A "$JOB_AFTER")
+(( JOB_HEADING_SHIFT )) && args+=(--shift-heading-level-by="$JOB_HEADING_SHIFT")
+
+log "  pandoc \${args[*]}"
+if ! pandoc work-final.md "\${args[@]}" >pandoc.out 2>&1; then
+  cat pandoc.out >>"$LOG"
+  fail_json pandoc "$(tail -15 pandoc.out)"
+fi
+[[ -s pandoc.out ]] && cat pandoc.out >>"$LOG"
+
+renames=$(sanitize_media media)
+if [[ -n $renames ]]; then
+  while IFS=$'\\t' read -r old new; do
+    [[ -n $old ]] || continue
+    LC_ALL=C sed -i '' "s|media/\${old}|media/\${new}|g" doc.tex
+  done <<< "$renames"
+fi
+optimize_media media
+"$PY" "$HERE/rowlines.py" doc.tex >>"$LOG" 2>&1
+
+# Magic comments so an editor (TeXShop, TeXstudio, LaTeX Workshop) recompiling the delivered .tex picks LuaLaTeX, which lua-ul and luacolor require.
+{ print -r -- '% !TEX program = lualatex'; print -r -- '% !TEX TS-program = lualatex'; cat doc.tex; } > doc.tex.rd && mv doc.tex.rd doc.tex
+
+latexmk_args=(-lualatex -interaction=nonstopmode -halt-on-error -file-line-error)
+if [[ -n $JOB_BIBLIOGRAPHY ]]; then
+  BIBER=$(resolve_biber) || fail_json tools "biber is installed but will not run on this Mac. See $LOG."
+  log "  biber: $BIBER"
+  print -r -- "\\$biber = q{\\"$BIBER\\" %O %S};" > rd.latexmkrc
+  latexmk_args+=(-r rd.latexmkrc)
+fi
+
+log "  latexmk \${latexmk_args[*]}"
+if ! latexmk "\${latexmk_args[@]}" doc.tex >latexmk.out 2>&1; then
+  fail_json latex "$("$PY" "$HERE/job.py" latex-errors doc.log doc.blg 2>/dev/null)"
+fi
+
+"$PY" "$HERE/job.py" deliver "$JOB" 2>>"$LOG"
+`;
 
 // renderer/rowlines.py
 var rowlines_default = `#!/usr/bin/env python3

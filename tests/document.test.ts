@@ -165,6 +165,20 @@ describe('latex', () => {
 		expect(citeHeader(false, { lineNumbers: true })).toContain('\\DeclareRobustCommand{\\rdln}');
 		expect(citeHeader(false, { lineNumbers: true })).not.toContain('lineno');
 	});
+	it('guards lua-ul behind \\ifLuaTeX with a soul fallback for pdfLaTeX/XeLaTeX', () => {
+		const tex = citeHeader(false);
+		expect(tex).toContain('\\usepackage{iftex}');
+		const lua = tex.indexOf('\\ifLuaTeX');
+		const els = tex.indexOf('\\else');
+		const fi = tex.indexOf('\\fi');
+		expect(lua).toBeGreaterThan(-1);
+		expect(tex.indexOf('\\usepackage{lua-ul}')).toBeGreaterThan(lua);
+		expect(tex.indexOf('\\usepackage{lua-ul}')).toBeLessThan(els);
+		expect(tex.indexOf('\\usepackage{soul}')).toBeGreaterThan(els);
+		expect(tex).toContain('\\newcommand{\\rdunmatched}[1]{\\hl{#1}}');
+		expect(fi).toBeGreaterThan(els);
+		expect(citeHeader(false, { hideUnmatched: true })).not.toContain('lua-ul');
+	});
 	it('prints unmatched citations as plain text when citation alerts are hidden', () => {
 		expect(citeHeader(false)).toContain('\\newcommand{\\rdunmatched}[1]{\\highLight[yellow!40]{#1}}');
 		const hidden = citeHeader(true, { hideUnmatched: true });

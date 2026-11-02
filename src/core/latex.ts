@@ -78,10 +78,28 @@ export function metaHeader(meta: DocMeta): string {
 // (Developer Decision "Unmatched highlight"). The dialog's "Hide citation
 // alerts" toggle defines \rdunmatched as the plain text instead, so the
 // parenthetical prints unshaded.
-const UNMATCHED_PACKAGES = ['\\usepackage{xcolor}', '\\usepackage{luacolor}', '\\usepackage{lua-ul}'];
-
+//
+// Render Doc always compiles with LuaLaTeX, but the exported .tex is often recompiled by hand. luacolor and lua-ul refuse to load under pdfLaTeX or XeLaTeX, and lua-ul's half-installed font hook then raises "Undefined control sequence" on every page, so the highlight is guarded by \ifLuaTeX with soul's \hl as the fallback. The .tex also starts with a "% !TEX program = lualatex" magic comment (renderer/render-pdf.sh).
 export function unmatchedMacro(hide: boolean): string {
 	return `\\newcommand{\\rdunmatched}[1]{${hide ? '#1' : '\\highLight[yellow!40]{#1}'}}`;
+}
+
+export function unmatchedBlock(hide: boolean): string[] {
+	if (hide) return ['\\usepackage{xcolor}', unmatchedMacro(true)];
+	return [
+		'\\usepackage{xcolor}',
+		'\\usepackage{iftex}',
+		'\\ifLuaTeX',
+		'  \\usepackage{luacolor}',
+		'  \\usepackage{lua-ul}',
+		`  ${unmatchedMacro(false)}`,
+		'\\else % pdfLaTeX or XeLaTeX: soul highlight instead of lua-ul',
+		'  \\usepackage{soul}',
+		'  \\colorlet{rdunmatchedbg}{yellow!40}',
+		'  \\sethlcolor{rdunmatchedbg}',
+		'  \\newcommand{\\rdunmatched}[1]{\\hl{#1}}',
+		'\\fi',
+	];
 }
 
 // biblatex-ext's ext-authoryear (TeX Live 2024 has no apsa.bbx), configured so
@@ -144,8 +162,7 @@ export interface CiteHeaderOptions {
 export function citeHeader(withBibliography: boolean, options: CiteHeaderOptions = {}): string {
 	const lines = [
 		'% Written by Render Doc — included AFTER the preamble.',
-		...UNMATCHED_PACKAGES,
-		unmatchedMacro(options.hideUnmatched ?? false),
+		...unmatchedBlock(options.hideUnmatched ?? false),
 		pageBreakMacro(options.pageBreaks ?? false),
 	];
 	if (withBibliography) lines.push(...BIBLATEX);

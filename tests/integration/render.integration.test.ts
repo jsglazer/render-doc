@@ -187,6 +187,8 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(tex).toContain('\\def\\DocAuthor{Joshua S. Glazer}');
 		expect(tex).toMatch(/\\includegraphics(\[[^\]]*\])?\{media\//);
 		expect(tex).not.toContain(buildDir);
+		expect(tex.startsWith('% !TEX program = lualatex\n% !TEX TS-program = lualatex\n')).toBe(true);
+		expect(tex).toContain('\\ifLuaTeX');
 	});
 
 	it('refuses an existing export folder unless the job says overwrite', () => {

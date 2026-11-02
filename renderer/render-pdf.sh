@@ -100,6 +100,9 @@ fi
 optimize_media media
 "$PY" "$HERE/rowlines.py" doc.tex >>"$LOG" 2>&1
 
+# Magic comments so an editor (TeXShop, TeXstudio, LaTeX Workshop) recompiling the delivered .tex picks LuaLaTeX, which lua-ul and luacolor require.
+{ print -r -- '% !TEX program = lualatex'; print -r -- '% !TEX TS-program = lualatex'; cat doc.tex; } > doc.tex.rd && mv doc.tex.rd doc.tex
+
 latexmk_args=(-lualatex -interaction=nonstopmode -halt-on-error -file-line-error)
 if [[ -n $JOB_BIBLIOGRAPHY ]]; then
   BIBER=$(resolve_biber) || fail_json tools "biber is installed but will not run on this Mac. See $LOG."

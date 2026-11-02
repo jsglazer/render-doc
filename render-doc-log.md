@@ -91,3 +91,24 @@ Render Doc 1.0.2 adds a **Line numbers** switch to the render dialog, and it's d
 **Session summary (as presented to Josh):**
 
 Line numbers now run through the whole document instead of restarting at 1 on each page. This is in Render Doc 1.0.3, which is deployed and reloaded in VaultSchar, committed and pushed. I checked it with a three-page test PDF, where page 2 starts at line 47. All 85 tests pass.
+
+## 2026-11-01 20:10 — 1.0.11: exported .tex compiles under any engine
+
+**User prompts:** "please see why this won't compile: ~/Library/CloudStorage/Dropbox/_Schar/Classes/2026-B/Data - POGO 511/Exports/0.0.2 Tests Dev/0.0.2 Tests.tex" — then "both, fix the file and fix the issue in the Render Doc template"
+
+**Diagnosis:** The exported `0.0.2 Tests.tex` had been recompiled by hand with pdfLaTeX (log: `This is pdfTeX…`). The after-preamble block (`citeHeader`) loads `luacolor` and `lua-ul`, which only run under LuaLaTeX. Under pdfLaTeX both packages fail to load, but `lua-ul` has already hooked `\LuaULResetUnderline` into `\reset@font`, so `\begin{document}` fails and every page output repeats "Undefined control sequence". The result was a 58 MB log and a 6 KB stub PDF. Render Doc's own pipeline (`latexmk -lualatex`) was never affected.
+
+**Changes:**
+- `src/core/latex.ts`: replaced `UNMATCHED_PACKAGES` with `unmatchedBlock(hide)`. When alerts are shown, it loads `iftex` and wraps `luacolor`/`lua-ul`/`\highLight` in `\ifLuaTeX`. The `\else` branch uses `soul`'s `\hl` with `\colorlet{rdunmatchedbg}{yellow!40}`. When alerts are hidden, it loads only `xcolor` plus the plain `\rdunmatched`, so lua-ul is skipped entirely.
+- `renderer/render-pdf.sh`: after `rowlines.py`, prepends `% !TEX program = lualatex` and `% !TEX TS-program = lualatex` to `doc.tex`, so TeXShop, TeXstudio and LaTeX Workshop pick LuaLaTeX when the delivered `.tex` is recompiled.
+- Tests: new unit test for the `\ifLuaTeX`/soul guard and for the hidden case dropping lua-ul; the integration test now checks that the delivered `.tex` starts with the magic comments and contains `\ifLuaTeX`.
+- Version 1.0.11 in `manifest.json`, `package.json`, `package-lock.json`, `versions.json` and the Dev file.
+- User file `0.0.2 Tests.tex`: added the same magic comments and engine guard. Deleted the 58 MB `.log` and the stale `.synctex(busy)`, rebuilt the PDF with `latexmk -lualatex` (3 pages, 0 errors), and cleaned up the auxiliary files. The original is saved in the scratchpad as `0.0.2-Tests.orig.tex`.
+
+**Verification:** `tsc` clean, `eslint src` clean, `vitest run` 8 files and 113/113 passed (including the real-compile integration tests). The fixed user file, with an added `\rdunmatched{(Jones \& Smith, 2015)}` line, compiled with 0 errors under lualatex, pdflatex and xelatex. `pdftotext` shows the highlighted text in all three PDFs.
+
+| # | Issue | Fix |
+| --- | --- | --- |
+| 1 | Exported .tex fails under pdfLaTeX/XeLaTeX: lua-ul/luacolor are LuaTeX-only, and the error loops into a 58 MB log | Highlight block guarded by `\ifLuaTeX`, with a `soul` `\hl` fallback on other engines; lua-ul not loaded at all when alerts are hidden |
+| 2 | Editors don't know the exported .tex needs LuaLaTeX | `% !TEX program = lualatex` / `TS-program` magic comments prepended to the delivered .tex |
+| 3 | User's `0.0.2 Tests.tex` wouldn't compile | Same guard and magic comments applied by hand; PDF rebuilt; broken log removed |
