@@ -112,3 +112,22 @@ Line numbers now run through the whole document instead of restarting at 1 on ea
 | 1 | Exported .tex fails under pdfLaTeX/XeLaTeX: lua-ul/luacolor are LuaTeX-only, and the error loops into a 58 MB log | Highlight block guarded by `\ifLuaTeX`, with a `soul` `\hl` fallback on other engines; lua-ul not loaded at all when alerts are hidden |
 | 2 | Editors don't know the exported .tex needs LuaLaTeX | `% !TEX program = lualatex` / `TS-program` magic comments prepended to the delivered .tex |
 | 3 | User's `0.0.2 Tests.tex` wouldn't compile | Same guard and magic comments applied by hand; PDF rebuilt; broken log removed |
+
+**Session summary (as presented to Josh):**
+
+Both are fixed. Render Doc 1.0.11 is committed and pushed, but not deployed yet.
+
+**Your file:** `0.0.2 Tests.tex` now compiles. I made two changes:
+- Added `% !TEX program = lualatex` as the first line, so your editor uses LuaLaTeX.
+- Wrapped the highlight block in an engine check: it uses `lua-ul` under LuaLaTeX and switches to `soul`'s `\hl` under pdfLaTeX or XeLaTeX.
+
+I also deleted the 58 MB log and the stale `.synctex(busy)` file, and rebuilt the PDF with LuaLaTeX (3 pages, no errors). I tested the fixed file under lualatex, pdflatex and xelatex. All three compiled with 0 errors and showed the highlighted citation text.
+
+**Render Doc:** Render Doc's own renders were always fine, because it runs `latexmk -lualatex`. The break only happened when you recompiled the exported `.tex` by hand. The fix:
+- `src/core/latex.ts`: the after-preamble block now uses the same `\ifLuaTeX` check with the `soul` fallback. When "Hide citation alerts" is on, it doesn't load `lua-ul` at all.
+- `renderer/render-pdf.sh`: every delivered `.tex` now starts with `% !TEX program = lualatex` and `% !TEX TS-program = lualatex`.
+- Added tests for both changes. All 113 tests pass, including the ones that run a real LaTeX compile.
+
+Your original `.tex` is saved at `/private/tmp/claude-501/-Users-josh-Dev/0e9b1496-a730-4c9a-9401-73ab891fea6b/scratchpad/0.0.2-Tests.orig.tex`.
+
+Should I deploy 1.0.11 to VaultSchar so new exports get the fix?
