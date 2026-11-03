@@ -228,6 +228,7 @@ function lineNumbersAllowed(mode) {
 var import_obsidian = require("obsidian");
 
 // src/core/document.ts
+var TITLE_BLOCK_KEYS = ["title", "titleshort", "class", "course", "coursenum", "classnum", "prof", "date"];
 function asText(value) {
   if (typeof value === "string" && value.trim() !== "") return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -240,6 +241,7 @@ function readDocMeta(frontmatter, basename, defaultAuthor = "") {
   const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a) => a !== null);
   const fallback = asText(defaultAuthor);
   const title = (_a = asText(fm.title)) != null ? _a : basename;
+  const hasTitleBlock = noteAuthors.length > 0 || TITLE_BLOCK_KEYS.some((k) => asText(fm[k]) !== null);
   return {
     title,
     shortTitle: (_b = asText(fm.titleshort)) != null ? _b : title,
@@ -247,7 +249,8 @@ function readDocMeta(frontmatter, basename, defaultAuthor = "") {
     className: (_c = asText(fm.class)) != null ? _c : asText(fm.course),
     classNum: (_d = asText(fm.coursenum)) != null ? _d : asText(fm.classnum),
     prof: asText(fm.prof),
-    date: asText(fm.date)
+    date: asText(fm.date),
+    hasTitleBlock
   };
 }
 var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -273,6 +276,7 @@ function longDate(year, month, day) {
   return `${(_a = WEEKDAYS[d.getUTCDay()]) != null ? _a : ""}, ${(_b = MONTHS[month - 1]) != null ? _b : ""} ${ordinal(day)}, ${year}`;
 }
 function pandocMetadata(meta) {
+  if (!meta.hasTitleBlock) return {};
   const out = { title: meta.title };
   if (meta.authors.length > 0) out.author = meta.authors;
   if (meta.date !== null) out.date = meta.date;

@@ -27,6 +27,13 @@ describe('readDocMeta', () => {
 		expect(readDocMeta({ class: 'Methods', classnum: '(POGO-801-001)' }, 'n').classNum).toBe('(POGO-801-001)');
 		expect(readDocMeta({ title: 'Long Title' }, 'n').shortTitle).toBe('Long Title');
 	});
+	it('has a title block only when the note has a title-block field (Update003)', () => {
+		expect(readDocMeta(undefined, 'n', 'Default').hasTitleBlock).toBe(false);
+		expect(readDocMeta({ tags: ['x'], cite_sources: 'Lib', title: '  ' }, 'n', 'Default').hasTitleBlock).toBe(false);
+		for (const fm of [{ title: 'T' }, { titleshort: 'S' }, { author: 'A' }, { author: ['A'] }, { class: 'C' }, { course: 'C' }, { coursenum: '1' }, { classnum: 1 }, { prof: 'P' }, { date: '2026-11-03' }]) {
+			expect(readDocMeta(fm, 'n').hasTitleBlock).toBe(true);
+		}
+	});
 	it('formats the cover date like "Monday, January 1st, 2020", using today for a blank one', () => {
 		expect(formatCoverDate('2020-01-01')).toBe('Wednesday, January 1st, 2020');
 		expect(formatCoverDate('2026-10-28')).toBe('Wednesday, October 28th, 2026');
@@ -38,7 +45,8 @@ describe('readDocMeta', () => {
 		expect(formatCoverDate(null, new Date(2026, 9, 28))).toBe('Wednesday, October 28th, 2026');
 	});
 	it('passes author and date only when present', () => {
-		expect(pandocMetadata(readDocMeta({}, 'n'))).toEqual({ title: 'n' });
+		expect(pandocMetadata(readDocMeta({}, 'n'))).toEqual({});
+		expect(pandocMetadata(readDocMeta({ class: 'POLS 501' }, 'n'))).toEqual({ title: 'n' });
 		expect(pandocMetadata(readDocMeta({ author: ['A', 'B'], date: '2026-10-21' }, 'n'))).toEqual({
 			title: 'n',
 			author: ['A', 'B'],

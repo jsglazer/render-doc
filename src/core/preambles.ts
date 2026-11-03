@@ -14,7 +14,9 @@
 // each line skipped when empty. The title wraps within the middle 56% of the
 // page. The cover has no header or footer and is not counted, so the first
 // page of text is page 1 of N. Dev has no title page at all: its \maketitle
-// prints nothing, and the header carries the title.
+// prints nothing, and the header carries the title. A note with no title-block
+// fields gets no pandoc title, so pandoc never calls \maketitle and Submit has
+// no cover page either (Update003).
 
 const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.75in, includehead, includefoot, marginparwidth=.75in, marginparsep=.125in]{geometry}
 \setlength{\parskip}{.15in}

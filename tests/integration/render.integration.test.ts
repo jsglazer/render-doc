@@ -267,6 +267,31 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(tex).not.toContain('rdln');
 	}, 300_000);
 
+	it('Submit with no title-block fields: no cover page, the text starts on page 1 (Update003)', async () => {
+		const build3 = join(tmp, 'build-nocover');
+		const parent3 = join(tmp, 'out-nocover');
+		mkdirSync(join(build3, 'assets'), { recursive: true });
+		mkdirSync(parent3);
+		const meta = readDocMeta({ tags: ['draft'] }, 'Paper', 'Joshua S. Glazer');
+		const { files, job } = buildFiles(prepared, meta, { resourcePath: FIXTURES, parentDir: parent3, folderName: 'Paper', stem: 'Paper', overwrite: false }, { mode: 'submit' });
+		for (const [name, content] of Object.entries(files)) writeFileSync(join(build3, name), content, 'utf8');
+		writeFileSync(join(build3, 'preamble.tex'), DEFAULT_SUBMIT_PREAMBLE, 'utf8');
+		copyFileSync(join(FIXTURES, 'refs.bib'), join(build3, 'refs.bib'));
+		copyFileSync(join(FIXTURES, 'fig.png'), join(build3, 'assets', '1-fig.png'));
+		writeFileSync(join(build3, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
+		const st = await runRenderer(RENDERER, join(build3, 'job.json'), build3);
+		expect(st, JSON.stringify(st)).toMatchObject({ ok: true });
+
+		const pages = pdfText(join(parent3, 'Paper', 'Paper.pdf')).split('\f').filter((p) => p.trim() !== '');
+		expect(pages).toHaveLength(2);
+		const first = pages[0] ?? '';
+		expect(first).toContain('Campaign money');
+		expect(first).toMatch(/Paper\s+Joshua S\. Glazer/);
+		expect(first).toMatch(/^\s+1 of 2\s*$/m);
+		const body3 = readFileSync(join(parent3, 'Paper', 'Paper.tex'), 'utf8').split('\\begin{document}')[1] ?? '';
+		expect(body3).not.toContain('\\maketitle');
+	}, 300_000);
+
 	it('overwrites only its own files when the job says overwrite', () => {
 		const folder = join(parentDir, 'Paper');
 		writeFileSync(join(folder, 'notes.txt'), 'mine', 'utf8');

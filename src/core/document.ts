@@ -10,7 +10,15 @@ export interface DocMeta {
 	classNum: string | null; // coursenum: (or classnum:), printed under the class
 	prof: string | null; // prof:
 	date: string | null; // date:, as written
+	// Whether the note has any title-block field at all (title, titleshort,
+	// author, class/course, coursenum/classnum, prof, date). Without one there
+	// is no cover page: the document renders straight from its first page
+	// (Update003). The header still falls back to the basename and default author.
+	hasTitleBlock: boolean;
 }
+
+// Scalar title-block keys; author: is checked separately (it may be a list).
+const TITLE_BLOCK_KEYS = ['title', 'titleshort', 'class', 'course', 'coursenum', 'classnum', 'prof', 'date'] as const;
 
 function asText(value: unknown): string | null {
 	if (typeof value === 'string' && value.trim() !== '') return value.trim();
@@ -26,6 +34,7 @@ export function readDocMeta(frontmatter: Readonly<Record<string, unknown>> | und
 	const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a): a is string => a !== null);
 	const fallback = asText(defaultAuthor);
 	const title = asText(fm.title) ?? basename;
+	const hasTitleBlock = noteAuthors.length > 0 || TITLE_BLOCK_KEYS.some((k) => asText(fm[k]) !== null);
 	return {
 		title,
 		shortTitle: asText(fm.titleshort) ?? title,
@@ -34,6 +43,7 @@ export function readDocMeta(frontmatter: Readonly<Record<string, unknown>> | und
 		classNum: asText(fm.coursenum) ?? asText(fm.classnum),
 		prof: asText(fm.prof),
 		date: asText(fm.date),
+		hasTitleBlock,
 	};
 }
 
@@ -65,8 +75,10 @@ function longDate(year: number, month: number, day: number): string {
 }
 
 // pandoc --metadata-file contents (JSON is YAML). The title makes pandoc call
-// \maketitle, which the preamble turns into the cover page.
+// \maketitle, which the preamble turns into the cover page — so a note with no
+// title-block fields gets no title here, and pandoc skips \maketitle entirely.
 export function pandocMetadata(meta: DocMeta): Record<string, unknown> {
+	if (!meta.hasTitleBlock) return {};
 	const out: Record<string, unknown> = { title: meta.title };
 	if (meta.authors.length > 0) out.author = meta.authors;
 	if (meta.date !== null) out.date = meta.date;
