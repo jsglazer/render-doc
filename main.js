@@ -421,6 +421,7 @@ function extractBody(doc, sigilChar = DEFAULT_SIGIL_CHAR) {
 // src/core/blockSeparation.ts
 var HEADING_RE = /^#{1,6}(?:[ \t]|$)/;
 var QUOTE_RE = /^ {0,3}>/;
+var YAML_OPENER_RE = /^---[ \t]*$/;
 var TABLE_SEPARATOR_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
 function opensTable(line, next) {
   return line.includes("|") && next !== void 0 && next.includes("-") && TABLE_SEPARATOR_RE.test(next);
@@ -443,6 +444,8 @@ function separateBlocks(markdown) {
     if (needsBlank) out.push("");
     if (isFenceLine(line)) fence = nextFenceState(line, fence);
     out.push(line);
+    const next = lines[i + 1];
+    if (!afterText && YAML_OPENER_RE.test(line) && next !== void 0 && next.trim() !== "") out.push("");
   }
   return out.join("\n");
 }

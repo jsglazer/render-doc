@@ -18,6 +18,14 @@ describe('separateBlocks', () => {
 		expect(separateBlocks(md)).toBe(md);
 	});
 
+	it('puts a blank line after a --- rule with text right under it, so pandoc does not read a YAML block', () => {
+		expect(separateBlocks('Text\n\n---\n**2026-10-31 — Note**\n\nMore')).toBe('Text\n\n---\n\n**2026-10-31 — Note**\n\nMore');
+		expect(separateBlocks('---\ntitle: x')).toBe('---\n\ntitle: x');
+		expect(separateBlocks('Text\n\n---\n\n## Next')).toBe('Text\n\n---\n\n## Next');
+		expect(separateBlocks('Setext heading\n---\nBody')).toBe('Setext heading\n---\nBody');
+		expect(separateBlocks('```\n\n---\nkey: v\n```')).toBe('```\n\n---\nkey: v\n```');
+	});
+
 	it('separates quotes, tables and fences from the text above them', () => {
 		expect(separateBlocks('Text\n> quote\n> more')).toBe('Text\n\n> quote\n> more');
 		expect(separateBlocks('Text\n| a | b |\n|---|---|\n| 1 | 2 |')).toBe('Text\n\n| a | b |\n|---|---|\n| 1 | 2 |');
