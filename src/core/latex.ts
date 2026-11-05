@@ -69,9 +69,22 @@ export function metaHeader(meta: DocMeta): string {
 		def('DocProf', meta.prof),
 		def('DocDate', formatCoverDate(meta.date)),
 		`\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfauthor={${author}},pdfcreator={Render Doc}}}`,
+		...EMOJI_FALLBACK,
 		'',
 	].join('\n');
 }
+
+// Latin Modern has no emoji, so a note with 🟣 or ✅ failed with "Missing character: There is no 🟣 (U+1F7E3) in font lmroman12-regular". Under LuaLaTeX, luaotfload gives every text font a fallback to Apple Color Emoji (in harf mode, which draws its colour bitmaps), and the three Latin Modern families are reloaded so the already-loaded defaults pick it up. It lives in meta.tex, BEFORE the preamble, so a custom preamble's own \setmainfont inherits the fallback through \defaultfontfeatures+. pdfLaTeX and XeLaTeX (the hand-recompiled .tex) skip it.
+export const EMOJI_FALLBACK: readonly string[] = [
+	'% Emoji fallback for every text font (LuaLaTeX only).',
+	'\\ifLuaTeX',
+	'  \\directlua{luaotfload.add_fallback("rdemoji", {"AppleColorEmoji:mode=harf;"})}',
+	'  \\defaultfontfeatures+{RawFeature={fallback=rdemoji}}',
+	'  \\setmainfont{Latin Modern Roman}',
+	'  \\setsansfont{Latin Modern Sans}',
+	'  \\setmonofont{Latin Modern Mono}',
+	'\\fi',
+];
 
 // Unmatched and ambiguous citation-like parentheticals stay in the text,
 // highlighted. lua-ul's \highLight breaks across lines; \colorbox cannot

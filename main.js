@@ -79,6 +79,7 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
 
 \RequirePackage{lastpage}    %% Required for pages of page number
 \RequirePackage{fancyhdr}   %must come after geometry
+\setlength{\headheight}{16pt}   %fancyhdr wants >= 13.6pt for the \small bold header at 12pt, ~15pt with an emoji in it
 \RequirePackage{etoolbox}
 \pagestyle{fancy}
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
@@ -160,7 +161,7 @@ function preambleFingerprint(text2) {
   }
   return h.toString(16).padStart(8, "0");
 }
-var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a"]);
+var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a", "00249892", "7a81154c"]);
 
 // src/core/settings.ts
 var FONT_SIZES = [8, 9, 10, 11, 12, 14, 17, 20];
@@ -490,9 +491,20 @@ function metaHeader(meta) {
     def("DocProf", meta.prof),
     def("DocDate", formatCoverDate(meta.date)),
     `\\AtBeginDocument{\\hypersetup{pdftitle={${t}},pdfauthor={${author}},pdfcreator={Render Doc}}}`,
+    ...EMOJI_FALLBACK,
     ""
   ].join("\n");
 }
+var EMOJI_FALLBACK = [
+  "% Emoji fallback for every text font (LuaLaTeX only).",
+  "\\ifLuaTeX",
+  '  \\directlua{luaotfload.add_fallback("rdemoji", {"AppleColorEmoji:mode=harf;"})}',
+  "  \\defaultfontfeatures+{RawFeature={fallback=rdemoji}}",
+  "  \\setmainfont{Latin Modern Roman}",
+  "  \\setsansfont{Latin Modern Sans}",
+  "  \\setmonofont{Latin Modern Mono}",
+  "\\fi"
+];
 function unmatchedMacro(hide) {
   return `\\newcommand{\\rdunmatched}[1]{${hide ? "#1" : "\\highLight[yellow!40]{#1}"}}`;
 }

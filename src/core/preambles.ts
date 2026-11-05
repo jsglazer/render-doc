@@ -31,6 +31,7 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
 
 \RequirePackage{lastpage}    %% Required for pages of page number
 \RequirePackage{fancyhdr}   %must come after geometry
+\setlength{\headheight}{16pt}   %fancyhdr wants >= 13.6pt for the \small bold header at 12pt, ~15pt with an emoji in it
 \RequirePackage{etoolbox}
 \pagestyle{fancy}
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
@@ -121,7 +122,7 @@ export function preambleFingerprint(text: string): string {
 	return h.toString(16).padStart(8, '0');
 }
 
-// Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit, 1.0.5 Dev, 1.0.5 Submit). A saved preamble that
+// Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit, 1.0.5 Dev, 1.0.5 Submit, 1.0.13 Dev, 1.0.13 Submit). A saved preamble that
 // matches one was never edited, so it follows the current default instead.
 // Add the old fingerprints here whenever a default changes.
-export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40', 'f19a1df5', '2afbc73a']);
+export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40', 'f19a1df5', '2afbc73a', '00249892', '7a81154c']);

@@ -140,7 +140,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 
 	afterAll(() => {
 		delete process.env.RENDER_DOC_CACHE;
-		if (tmp !== '') rmSync(tmp, { recursive: true, force: true });
+		if (tmp !== '' && !process.env.RD_KEEP) rmSync(tmp, { recursive: true, force: true });
 	});
 
 	it('succeeds and reports the export folder', () => {
@@ -345,7 +345,7 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 	});
 	afterAll(() => {
 		delete process.env.RENDER_DOC_CACHE;
-		if (tmp !== '') rmSync(tmp, { recursive: true, force: true });
+		if (tmp !== '' && !process.env.RD_KEEP) rmSync(tmp, { recursive: true, force: true });
 	});
 
 	it('starts the later # heading on a new page only when asked, never the opening one', async () => {
@@ -377,5 +377,43 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 		// The same paragraph wraps onto more lines at 20 pt than at 10 pt.
 		const lines = (pages: string[]): number => pages.join('\n').split('\n').filter((l) => l.trim() !== '').length;
 		expect(lines(big)).toBeGreaterThan(lines(ten));
+	}, 300_000);
+});
+
+// A note with emoji failed with "Missing character: There is no 🟣 (U+1F7E3) in font lmroman12-regular"; meta.tex now gives every text font an Apple Color Emoji fallback.
+describe.skipIf(!ready)('emoji (real toolchain)', () => {
+	let tmp = '';
+	const NOTE_EMOJI = ['---', 'title: Emoji 🟢 Check', '---', '# Status 🟠', 'Coverage (==🟣citation==) and a ==🟡Hypo test== note.', '', 'Bold **✅ done**, italic *❌ not yet* and code `🟢 ok`.'].join('\n');
+	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
+
+	beforeAll(() => {
+		tmp = mkdtempSync(join(tmpdir(), 'render-doc-emoji-'));
+		process.env.RENDER_DOC_CACHE = join(tmp, 'cache');
+	});
+	afterAll(() => {
+		delete process.env.RENDER_DOC_CACHE;
+		if (tmp !== '' && !process.env.RD_KEEP) rmSync(tmp, { recursive: true, force: true });
+	});
+
+	it('renders emoji in the title, headings, highlights, bold, italic and code with the Apple Color Emoji fallback', async () => {
+		const buildDir = join(tmp, 'build');
+		const parentDir = join(tmp, 'out');
+		mkdirSync(join(buildDir, 'assets'), { recursive: true });
+		mkdirSync(parentDir);
+		const prepared = await prepareDocument(NOTE_EMOJI, 'Emoji.md', '@', resolver, new Map());
+		const { files, job } = buildFiles(prepared, readDocMeta({ title: 'Emoji 🟢 Check', author: 'Me' }, 'Emoji'), { resourcePath: FIXTURES, parentDir, folderName: 'Emoji', stem: 'Emoji', overwrite: false }, { mode: 'submit' });
+		for (const [file, content] of Object.entries(files)) writeFileSync(join(buildDir, file), content, 'utf8');
+		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_SUBMIT_PREAMBLE, 'utf8');
+		writeFileSync(join(buildDir, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
+		const status = await runRenderer(RENDERER, join(buildDir, 'job.json'), buildDir);
+		expect(status, JSON.stringify(status)).toMatchObject({ ok: true });
+
+		const log = readFileSync(join(buildDir, 'doc.log'), 'utf8');
+		expect(log).not.toContain('Missing character');
+		expect(log).not.toMatch(/headheight is too small/);
+		const fonts = execFileSync('pdffonts', [join(parentDir, 'Emoji', 'Emoji.pdf')], { encoding: 'utf8', env: { ...process.env, PATH: ENV_PATH } });
+		expect(fonts).toContain('AppleColorEmoji');
+		const text = pdfText(join(parentDir, 'Emoji', 'Emoji.pdf'));
+		for (const e of ['🟢', '🟠', '🟣', '🟡', '✅', '❌']) expect(text).toContain(e);
 	}, 300_000);
 });

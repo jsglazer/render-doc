@@ -211,6 +211,15 @@ describe('latex', () => {
 		expect(tex).toContain('\\def\\DocClassNum{}');
 		expect(tex).toContain('\\def\\DocDate{Wednesday, January 1st, 2020}');
 	});
+
+	it('gives every text font an emoji fallback under LuaLaTeX only', () => {
+		const tex = metaHeader(readDocMeta({ title: 'T' }, 'n', 'Me'));
+		expect(tex).toContain('\\ifLuaTeX');
+		expect(tex).toContain('luaotfload.add_fallback("rdemoji", {"AppleColorEmoji:mode=harf;"})');
+		expect(tex).toContain('\\defaultfontfeatures+{RawFeature={fallback=rdemoji}}');
+		expect(tex.indexOf('\\setmainfont{Latin Modern Roman}')).toBeGreaterThan(tex.indexOf('\\defaultfontfeatures+'));
+		expect(tex.trimEnd().endsWith('\\fi')).toBe(true);
+	});
 });
 
 describe('extractBody', () => {
