@@ -16,10 +16,12 @@ import { toPandocMarkdown } from './obsidianMarkdown';
 import type { FontSize, RenderMode } from './settings';
 import { DEFAULT_FONT_SIZE, documentClassFor, lineNumbersAllowed } from './settings';
 import type { CiteIndex } from './sources';
+import { stripTags } from './tags';
 
 export interface PreparedDocument {
 	markdown: string; // pandoc Markdown with raw \autocite / \rdunmatched spans
 	numberedMarkdown: string; // the same, plus raw \rdln{<Obsidian line>} spans
+	submitMarkdown: string; // the same as markdown, minus #tags (src/core/tags.ts)
 	citations: CitationResult;
 	issues: ConversionIssue[];
 	outlineLinesStripped: number;
@@ -40,9 +42,11 @@ export async function prepareDocument(
 	const extraction = extractBody(markSourceLines(doc, sigilChar), sigilChar);
 	const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
 	const citations = replaceCitations(separateBlocks(converted.markdown), index);
+	const markdown = stripMarkers(citations.markdown);
 	return {
-		markdown: stripMarkers(citations.markdown),
+		markdown,
 		numberedMarkdown: markersToLatex(citations.markdown),
+		submitMarkdown: stripTags(markdown),
 		citations,
 		issues: converted.issues,
 		outlineLinesStripped: extraction.outlineLinesStripped,
@@ -87,8 +91,9 @@ export function buildFiles(
 	const cites = prepared.citations.citekeys.length > 0;
 	const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
 	const numbered = options.lineNumbers === true && lineNumbersAllowed(options.mode ?? 'dev');
+	const body = numbered ? prepared.numberedMarkdown : options.mode === 'submit' ? prepared.submitMarkdown : prepared.markdown;
 	const files: Record<string, string> = {
-		'source.md': `${numbered ? prepared.numberedMarkdown : prepared.markdown}\n`,
+		'source.md': `${body}\n`,
 		'meta.tex': metaHeader(meta),
 		'cite.tex': citeHeader(cites, { lineNumbers: numbered, pageBreaks: options.pageBreaks, hideUnmatched: options.hideUnmatched }),
 		'meta.json': `${JSON.stringify(pandocMetadata(meta), null, 2)}\n`,

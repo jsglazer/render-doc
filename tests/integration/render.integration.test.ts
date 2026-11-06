@@ -417,3 +417,46 @@ describe.skipIf(!ready)('emoji (real toolchain)', () => {
 		for (const e of ['🟢', '🟠', '🟣', '🟡', '✅', '❌']) expect(text).toContain(e);
 	}, 300_000);
 });
+
+// Update004: a Submit PDF carries no #tags; a Dev PDF of the same note still does.
+describe.skipIf(!ready)('tags (real toolchain)', () => {
+	let tmp = '';
+	const NOTE_TAGS = ['---', 'title: Tag Check', '---', '# Opening #headtag', 'A sentence #fixme continues here.', '#loneline', 'Same paragraph.', '', '- Item #itemtag', '- #onlytag', '', 'Issue #123 stays, and `#incode` stays.'].join('\n');
+	const TAGS = ['#headtag', '#fixme', '#loneline', '#itemtag', '#onlytag'];
+	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
+
+	beforeAll(() => {
+		tmp = mkdtempSync(join(tmpdir(), 'render-doc-tags-'));
+		process.env.RENDER_DOC_CACHE = join(tmp, 'cache');
+	});
+	afterAll(() => {
+		delete process.env.RENDER_DOC_CACHE;
+		if (tmp !== '' && !process.env.RD_KEEP) rmSync(tmp, { recursive: true, force: true });
+	});
+
+	async function renderMode(mode: 'dev' | 'submit'): Promise<string> {
+		const buildDir = join(tmp, `build-${mode}`);
+		const parentDir = join(tmp, `out-${mode}`);
+		mkdirSync(join(buildDir, 'assets'), { recursive: true });
+		mkdirSync(parentDir);
+		const prepared = await prepareDocument(NOTE_TAGS, 'Tags.md', '@', resolver, new Map());
+		const { files, job } = buildFiles(prepared, readDocMeta({ title: 'Tag Check', author: 'Me' }, 'Tags'), { resourcePath: FIXTURES, parentDir, folderName: 'Tags', stem: 'Tags', overwrite: false }, { mode });
+		for (const [file, content] of Object.entries(files)) writeFileSync(join(buildDir, file), content, 'utf8');
+		writeFileSync(join(buildDir, 'preamble.tex'), mode === 'submit' ? DEFAULT_SUBMIT_PREAMBLE : DEFAULT_DEV_PREAMBLE, 'utf8');
+		writeFileSync(join(buildDir, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
+		const status = await runRenderer(RENDERER, join(buildDir, 'job.json'), buildDir);
+		expect(status, JSON.stringify(status)).toMatchObject({ ok: true });
+		return pdfText(join(parentDir, 'Tags', 'Tags.pdf')).replace(/\s+/g, ' ');
+	}
+
+	it('Submit prints no tags and keeps the text around them', async () => {
+		const text = await renderMode('submit');
+		for (const tag of TAGS) expect(text).not.toContain(tag);
+		for (const kept of ['Opening', 'A sentence continues here. Same paragraph.', 'Item', 'Issue #123 stays', '#incode']) expect(text).toContain(kept);
+	}, 300_000);
+
+	it('Dev still prints them', async () => {
+		const text = await renderMode('dev');
+		for (const tag of TAGS) expect(text).toContain(tag);
+	}, 300_000);
+});

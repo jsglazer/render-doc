@@ -1086,14 +1086,74 @@ function collapseBlankRuns(markdown) {
   return out.join("\n");
 }
 
+// src/core/tags.ts
+var TOKEN_RE = /(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|(?<![\\$])\$(?=\S)[^$]*?(?<=\S)\$(?!\d)|(^|[ \t]+)#([\p{L}\p{N}_/-]+)/gu;
+var ALL_DIGITS_RE = /^\p{N}+$/u;
+var BARE_PREFIX_RE = /^[ \t]*(?:>[ \t]*)*(?:#{1,6}[ \t]*|(?:[-*+]|\d+[.)])[ \t]*(?:\[.\][ \t]*)?)?$/;
+var INDENTED_CODE_RE2 = /^(?: {4}|\t)/;
+var LIST_ITEM_RE2 = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/;
+function stripLineTags(line) {
+  let found = false;
+  let atStart = false;
+  const stripped = line.replace(TOKEN_RE, (whole, _ticks, lead, name, offset) => {
+    if (lead === void 0 || name === void 0 || ALL_DIGITS_RE.test(name)) return whole;
+    found = true;
+    if (offset === 0) atStart = true;
+    return "";
+  });
+  if (!found) return line;
+  if (BARE_PREFIX_RE.test(stripped)) return null;
+  return atStart ? stripped.trimStart() : stripped;
+}
+function stripTags(markdown) {
+  var _a, _b;
+  const out = [];
+  let fence = null;
+  let math = false;
+  let dropped = false;
+  for (const line of markdown.split("\n")) {
+    const fenceAfter = nextFenceState(line, fence);
+    if (fence !== null || fenceAfter !== null) {
+      fence = fenceAfter;
+      out.push(line);
+      dropped = false;
+      continue;
+    }
+    const trimmed = line.trim();
+    if (trimmed.startsWith("$$")) {
+      if (trimmed === "$$" || !trimmed.slice(2).includes("$$")) math = !math;
+      out.push(line);
+      dropped = false;
+      continue;
+    }
+    if (math || INDENTED_CODE_RE2.test(line) && !LIST_ITEM_RE2.test(line)) {
+      out.push(line);
+      dropped = false;
+      continue;
+    }
+    const kept = stripLineTags(line);
+    if (kept === null) {
+      dropped = true;
+      continue;
+    }
+    if (dropped && trimmed === "" && (out.length === 0 || ((_a = out[out.length - 1]) != null ? _a : "").trim() === "")) continue;
+    out.push(kept);
+    dropped = false;
+  }
+  while (out.length > 0 && ((_b = out[out.length - 1]) != null ? _b : "").trim() === "") out.pop();
+  return out.join("\n");
+}
+
 // src/core/render.ts
 async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
   const extraction = extractBody(markSourceLines(doc, sigilChar), sigilChar);
   const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
   const citations = replaceCitations(separateBlocks(converted.markdown), index);
+  const markdown = stripMarkers(citations.markdown);
   return {
-    markdown: stripMarkers(citations.markdown),
+    markdown,
     numberedMarkdown: markersToLatex(citations.markdown),
+    submitMarkdown: stripTags(markdown),
     citations,
     issues: converted.issues,
     outlineLinesStripped: extraction.outlineLinesStripped,
@@ -1107,8 +1167,9 @@ function buildFiles(prepared, meta, target, options = {}) {
   const cites = prepared.citations.citekeys.length > 0;
   const fontSize = (_a = options.fontSize) != null ? _a : DEFAULT_FONT_SIZE;
   const numbered = options.lineNumbers === true && lineNumbersAllowed((_b = options.mode) != null ? _b : "dev");
+  const body = numbered ? prepared.numberedMarkdown : options.mode === "submit" ? prepared.submitMarkdown : prepared.markdown;
   const files = {
-    "source.md": `${numbered ? prepared.numberedMarkdown : prepared.markdown}
+    "source.md": `${body}
 `,
     "meta.tex": metaHeader(meta),
     "cite.tex": citeHeader(cites, { lineNumbers: numbered, pageBreaks: options.pageBreaks, hideUnmatched: options.hideUnmatched }),
@@ -1888,7 +1949,7 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.titleEl.addClass("render-doc-title");
     this.showMode();
     contentEl.addClass("render-doc-modal");
-    new import_obsidian2.Setting(contentEl).setName("Version").setDesc("Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp.").addDropdown(
+    new import_obsidian2.Setting(contentEl).setName("Version").setDesc("Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp, #tags left out.").addDropdown(
       (d) => d.addOption("dev", "Dev").addOption("submit", "Submit").setValue(plan.mode).onChange((v) => {
         var _a;
         plan.mode = v;

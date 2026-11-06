@@ -52,7 +52,7 @@ export class RenderModal extends Modal {
 
 		new Setting(contentEl)
 			.setName('Version')
-			.setDesc('Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp.')
+			.setDesc('Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp, #tags left out.')
 			.addDropdown((d) =>
 				d
 					.addOption('dev', 'Dev')
