@@ -24,7 +24,7 @@ import { checkExportTarget, folderNameFor, readDocMeta, safeStem } from '../core
 import { DEFAULT_SIGIL_CHAR } from '../core/exportBody';
 import type { ExportResolver } from '../core/obsidianMarkdown';
 import type { PreparedDocument } from '../core/render';
-import { BIB_FILE, buildFiles, prepareDocument, PREAMBLE_FILE } from '../core/render';
+import { BIB_FILE, buildFiles, prepareDocument, PREAMBLE_FILE, versionOf } from '../core/render';
 import type { FontSize, RenderMode } from '../core/settings';
 import type { NoteMeta, SourceDiscovery } from '../core/sources';
 import { CITE_SOURCES_KEY, discoverSources } from '../core/sources';
@@ -174,7 +174,7 @@ export class RenderExporter {
 
 		// Before anything is compiled: every cited key must come back from Zotero.
 		let bib = '';
-		const keys = plan.prepared.citations.citekeys;
+		const keys = versionOf(plan.prepared, plan.mode).citations.citekeys;
 		if (keys.length > 0) {
 			progress('Fetching the bibliography from Zotero…');
 			const fetched = await fetchBibLaTeX(zoteroManagerApi(this.app), keys);

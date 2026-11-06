@@ -65,261 +65,6 @@ function revealInFinder(path) {
   return true;
 }
 
-// src/core/preambles.ts
-var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.75in, includehead, includefoot, marginparwidth=.75in, marginparsep=.125in]{geometry}
-\setlength{\parskip}{.15in}
-\usepackage{enumitem}
-\setlist{itemsep=2pt, parsep=0pt, topsep=4pt}
-\usepackage{hyperref}
-
-\RequirePackage{datetime}
-\settimeformat{ampmtime}
-\newdateformat{dashdate}{\THEYEAR-\twodigit{\THEMONTH}-\twodigit{\THEDAY}}
-\newtimeformat{dottime}{\twodigit{\THEHOUR}:\twodigit{\THEMINUTE}:\twodigit{\THESECOND}}
-
-\RequirePackage{lastpage}    %% Required for pages of page number
-\RequirePackage{fancyhdr}   %must come after geometry
-\setlength{\headheight}{16pt}   %fancyhdr wants >= 13.6pt for the \small bold header at 12pt, ~15pt with an emoji in it
-\RequirePackage{etoolbox}
-\pagestyle{fancy}
-\renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
-
-% Per-note values, set by Render Doc's meta.tex from the note's frontmatter
-% (title, titleshort, author, class, coursenum, prof, date). Empty when absent; the
-% header title falls back to \jobname, the short title to the title.
-\providecommand{\DocTitle}{}
-\providecommand{\DocShortTitle}{}
-\providecommand{\DocAuthor}{}
-\providecommand{\DocClass}{}
-\providecommand{\DocClassNum}{}
-\providecommand{\DocProf}{}
-\providecommand{\DocDate}{}
-\newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
-\newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderTitle}{\DocShortTitle}}
-
-`;
-var COVER_PAGE = String.raw`
-% Cover page (pandoc calls \maketitle at the start of the document).
-\newcommand{\CoverLine}[1]{\ifdefempty{#1}{}{#1\par\medskip}}
-\renewcommand{\maketitle}{%
-  \pagenumbering{Alph}%
-  \thispagestyle{empty}%
-  \begin{center}
-    \vspace*{\dimexpr .25\textheight - 1in\relax}
-    \parbox{.56\textwidth}{\centering\LARGE \HeaderTitle\par}\par
-    \vspace{.12\textheight}
-    {\large \DocAuthor\par}
-    \vfill
-    {\large \CoverLine{\DocClass}\CoverLine{\DocClassNum}\CoverLine{\DocProf}\CoverLine{\DocDate}}
-  \end{center}
-  \clearpage
-  \pagenumbering{arabic}%
-}
-`;
-var TABLE_LINES = String.raw`
-% Light grey rule between table rows. Just the color setup lives here — the
-% actual \hline-per-row is inserted into the generated .tex body by the
-% renderer's rowlines.py, since longtable's internal row-end machinery
-% actively resists doing this via a preamble hook.
-\usepackage{colortbl}
-\definecolor{rowline}{gray}{0.75}
-% Extra row height so the rules clear accents (hats, bars) on symbols.
-\renewcommand{\arraystretch}{1.3}
-`;
-var NO_TITLE = String.raw`
-% No title page in Dev (pandoc calls \maketitle at the start of the document).
-\renewcommand{\maketitle}{}
-`;
-var DEV_HEADER = String.raw`
-% Dev: title and author in the header; page x of y and a date/time stamp in the footer.
-\fancyhead{} % clear all header fields
-\fancyhead[L]{\small{\textbf{\HeaderTitle}}}
-\fancyhead[R]{\small{\DocAuthor}}
-\fancyfoot{}
-\fancyfoot[L]{\scriptsize{\thepage\ of \pageref{LastPage}}}
-\fancyfoot[R]{\scriptsize{\dashdate{\today} at \dottime}}
-\renewcommand{\headrulewidth}{0.4pt}
-\renewcommand{\footrulewidth}{0.4pt}
-`;
-var SUBMIT_HEADER = String.raw`
-% Submit: short title (bold) and author in the header; page x of y centred; no date/time stamp.
-\fancyhead{} % clear all header fields
-\fancyhead[L]{\small{\textbf{\HeaderShortTitle}}}
-\fancyhead[R]{\small{\DocAuthor}}
-\fancyfoot{}
-\fancyfoot[C]{\scriptsize{\thepage\ of \pageref{LastPage}}}
-\renewcommand{\headrulewidth}{0.4pt}
-\renewcommand{\footrulewidth}{0.4pt}
-`;
-var DEFAULT_DEV_PREAMBLE = `${COMMON}${NO_TITLE}${DEV_HEADER}${TABLE_LINES}`;
-var DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${COVER_PAGE}${SUBMIT_HEADER}${TABLE_LINES}`;
-function preambleFingerprint(text2) {
-  let h = 2166136261;
-  for (let i = 0; i < text2.length; i++) {
-    h ^= text2.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
-var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a", "00249892", "7a81154c"]);
-
-// src/core/settings.ts
-var FONT_SIZES = [8, 9, 10, 11, 12, 14, 17, 20];
-var DEFAULT_FONT_SIZE = 12;
-function isFontSize(value) {
-  return typeof value === "number" && FONT_SIZES.includes(value);
-}
-function documentClassFor(size) {
-  return size === 10 || size === 11 || size === 12 ? "article" : "extarticle";
-}
-var DEFAULT_PARENT_DIR = "~/Library/CloudStorage/Dropbox/_Schar/Classes";
-var DEFAULT_SETTINGS = {
-  defaultAuthor: "Joshua S. Glazer",
-  defaultParentDir: DEFAULT_PARENT_DIR,
-  devPreamble: DEFAULT_DEV_PREAMBLE,
-  submitPreamble: DEFAULT_SUBMIT_PREAMBLE,
-  lineNumbers: false,
-  mode: "dev",
-  openFolder: false,
-  fontSize: DEFAULT_FONT_SIZE
-};
-function text(value, fallback) {
-  return typeof value === "string" ? value : fallback;
-}
-function preamble(value, fallback) {
-  if (typeof value !== "string" || value.trim() === "") return fallback;
-  return RETIRED_DEFAULT_FINGERPRINTS.has(preambleFingerprint(value)) ? fallback : value;
-}
-function settingsToSave(settings) {
-  return {
-    ...settings,
-    devPreamble: settings.devPreamble === DEFAULT_DEV_PREAMBLE ? "" : settings.devPreamble,
-    submitPreamble: settings.submitPreamble === DEFAULT_SUBMIT_PREAMBLE ? "" : settings.submitPreamble
-  };
-}
-function mergeSettings(saved) {
-  const s = saved !== null && typeof saved === "object" ? saved : {};
-  return {
-    defaultAuthor: text(s.defaultAuthor, DEFAULT_SETTINGS.defaultAuthor),
-    defaultParentDir: text(s.defaultParentDir, DEFAULT_SETTINGS.defaultParentDir),
-    devPreamble: preamble(s.devPreamble, DEFAULT_SETTINGS.devPreamble),
-    submitPreamble: preamble(s.submitPreamble, DEFAULT_SETTINGS.submitPreamble),
-    lineNumbers: typeof s.lineNumbers === "boolean" ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
-    mode: s.mode === "submit" ? "submit" : "dev",
-    openFolder: typeof s.openFolder === "boolean" ? s.openFolder : DEFAULT_SETTINGS.openFolder,
-    fontSize: isFontSize(s.fontSize) ? s.fontSize : DEFAULT_SETTINGS.fontSize
-  };
-}
-function expandHome(dir, home) {
-  const d = dir.trim();
-  if (d === "~") return home.replace(/\/+$/, "");
-  return d.startsWith("~/") ? `${home.replace(/\/+$/, "")}/${d.slice(2)}` : d;
-}
-function initialParentDir(settings, home) {
-  return expandHome(settings.defaultParentDir.trim() !== "" ? settings.defaultParentDir : DEFAULT_PARENT_DIR, home);
-}
-function preambleFor(settings, mode) {
-  return mode === "submit" ? settings.submitPreamble : settings.devPreamble;
-}
-function lineNumbersAllowed(mode) {
-  return mode === "dev";
-}
-
-// src/export/exporter.ts
-var import_obsidian = require("obsidian");
-
-// src/core/document.ts
-var TITLE_BLOCK_KEYS = ["title", "titleshort", "class", "course", "coursenum", "classnum", "prof", "date"];
-function asText(value) {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  return null;
-}
-function readDocMeta(frontmatter, basename, defaultAuthor = "") {
-  var _a, _b, _c, _d;
-  const fm = frontmatter != null ? frontmatter : {};
-  const rawAuthor = fm.author;
-  const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a) => a !== null);
-  const fallback = asText(defaultAuthor);
-  const title = (_a = asText(fm.title)) != null ? _a : basename;
-  const hasTitleBlock = noteAuthors.length > 0 || TITLE_BLOCK_KEYS.some((k) => asText(fm[k]) !== null);
-  return {
-    title,
-    shortTitle: (_b = asText(fm.titleshort)) != null ? _b : title,
-    authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
-    className: (_c = asText(fm.class)) != null ? _c : asText(fm.course),
-    classNum: (_d = asText(fm.coursenum)) != null ? _d : asText(fm.classnum),
-    prof: asText(fm.prof),
-    date: asText(fm.date),
-    hasTitleBlock
-  };
-}
-var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-function ordinal(n) {
-  var _a;
-  const tens = n % 100;
-  if (tens >= 11 && tens <= 13) return `${n}th`;
-  return `${n}${(_a = ["th", "st", "nd", "rd"][n % 10]) != null ? _a : "th"}`;
-}
-function formatCoverDate(raw, today = /* @__PURE__ */ new Date()) {
-  if (raw === null) return longDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
-  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/.exec(raw.trim());
-  if (!m) return raw;
-  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const d = new Date(Date.UTC(year, month - 1, day));
-  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return raw;
-  return longDate(year, month, day);
-}
-function longDate(year, month, day) {
-  var _a, _b;
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return `${(_a = WEEKDAYS[d.getUTCDay()]) != null ? _a : ""}, ${(_b = MONTHS[month - 1]) != null ? _b : ""} ${ordinal(day)}, ${year}`;
-}
-function pandocMetadata(meta) {
-  if (!meta.hasTitleBlock) return {};
-  const out = { title: meta.title };
-  if (meta.authors.length > 0) out.author = meta.authors;
-  if (meta.date !== null) out.date = meta.date;
-  return out;
-}
-function safeStem(name) {
-  const cleaned = name.replace(/[/\\:]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/^\.+/, "").replace(/[.\s]+$/, "");
-  return cleaned === "" ? "Document" : cleaned;
-}
-function folderNameFor(name, mode) {
-  const base = name.replace(/\s+(?:Dev|Submit)\s*$/, "");
-  return `${base} ${mode === "submit" ? "Submit" : "Dev"}`;
-}
-function folderNameProblem(name) {
-  const t = name.trim();
-  if (t === "") return "Enter a folder name.";
-  if (t === "." || t === "..") return "That folder name is reserved.";
-  if (/[/:]/.test(t)) return "A folder name cannot contain / or :.";
-  return null;
-}
-function joinPath(dir, name) {
-  return `${dir.replace(/\/+$/, "")}/${name}`;
-}
-function checkExportTarget(parentDir, folderName, exists) {
-  const problem = folderNameProblem(folderName);
-  if (problem !== null) return { ok: false, reason: "invalid", message: problem };
-  const parent = parentDir.trim().replace(/(.)\/+$/, "$1");
-  if (parent === "" || !exists(parent)) {
-    return { ok: false, reason: "no-parent", message: `The parent folder does not exist: ${parentDir}` };
-  }
-  const target = joinPath(parent, folderName.trim());
-  if (exists(target)) {
-    return {
-      ok: true,
-      target,
-      exists: true,
-      warning: `${target} already exists. Rendering will overwrite its PDF, .tex, refs.bib and media/.`
-    };
-  }
-  return { ok: true, target, exists: false };
-}
-
 // src/core/exportBody.ts
 var DEFAULT_SIGIL_CHAR = "@";
 var PARAGRAPH_FLAG = "p";
@@ -449,6 +194,98 @@ function separateBlocks(markdown) {
     if (!afterText && YAML_OPENER_RE.test(line) && next !== void 0 && next.trim() !== "") out.push("");
   }
   return out.join("\n");
+}
+
+// src/core/document.ts
+var TITLE_BLOCK_KEYS = ["title", "titleshort", "class", "course", "coursenum", "classnum", "prof", "date"];
+function asText(value) {
+  if (typeof value === "string" && value.trim() !== "") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+function readDocMeta(frontmatter, basename, defaultAuthor = "") {
+  var _a, _b, _c, _d;
+  const fm = frontmatter != null ? frontmatter : {};
+  const rawAuthor = fm.author;
+  const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a) => a !== null);
+  const fallback = asText(defaultAuthor);
+  const title = (_a = asText(fm.title)) != null ? _a : basename;
+  const hasTitleBlock = noteAuthors.length > 0 || TITLE_BLOCK_KEYS.some((k) => asText(fm[k]) !== null);
+  return {
+    title,
+    shortTitle: (_b = asText(fm.titleshort)) != null ? _b : title,
+    authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
+    className: (_c = asText(fm.class)) != null ? _c : asText(fm.course),
+    classNum: (_d = asText(fm.coursenum)) != null ? _d : asText(fm.classnum),
+    prof: asText(fm.prof),
+    date: asText(fm.date),
+    hasTitleBlock
+  };
+}
+var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function ordinal(n) {
+  var _a;
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${(_a = ["th", "st", "nd", "rd"][n % 10]) != null ? _a : "th"}`;
+}
+function formatCoverDate(raw, today = /* @__PURE__ */ new Date()) {
+  if (raw === null) return longDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/.exec(raw.trim());
+  if (!m) return raw;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return raw;
+  return longDate(year, month, day);
+}
+function longDate(year, month, day) {
+  var _a, _b;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return `${(_a = WEEKDAYS[d.getUTCDay()]) != null ? _a : ""}, ${(_b = MONTHS[month - 1]) != null ? _b : ""} ${ordinal(day)}, ${year}`;
+}
+function pandocMetadata(meta) {
+  if (!meta.hasTitleBlock) return {};
+  const out = { title: meta.title };
+  if (meta.authors.length > 0) out.author = meta.authors;
+  if (meta.date !== null) out.date = meta.date;
+  return out;
+}
+function safeStem(name) {
+  const cleaned = name.replace(/[/\\:]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/^\.+/, "").replace(/[.\s]+$/, "");
+  return cleaned === "" ? "Document" : cleaned;
+}
+function folderNameFor(name, mode) {
+  const base = name.replace(/\s+(?:Dev|Submit)\s*$/, "");
+  return `${base} ${mode === "submit" ? "Submit" : "Dev"}`;
+}
+function folderNameProblem(name) {
+  const t = name.trim();
+  if (t === "") return "Enter a folder name.";
+  if (t === "." || t === "..") return "That folder name is reserved.";
+  if (/[/:]/.test(t)) return "A folder name cannot contain / or :.";
+  return null;
+}
+function joinPath(dir, name) {
+  return `${dir.replace(/\/+$/, "")}/${name}`;
+}
+function checkExportTarget(parentDir, folderName, exists) {
+  const problem = folderNameProblem(folderName);
+  if (problem !== null) return { ok: false, reason: "invalid", message: problem };
+  const parent = parentDir.trim().replace(/(.)\/+$/, "$1");
+  if (parent === "" || !exists(parent)) {
+    return { ok: false, reason: "no-parent", message: `The parent folder does not exist: ${parentDir}` };
+  }
+  const target = joinPath(parent, folderName.trim());
+  if (exists(target)) {
+    return {
+      ok: true,
+      target,
+      exists: true,
+      warning: `${target} already exists. Rendering will overwrite its PDF, .tex, refs.bib and media/.`
+    };
+  }
+  return { ok: true, target, exists: false };
 }
 
 // src/core/latex.ts
@@ -869,6 +706,13 @@ var MD_LINK_RE = /\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\s*\)/g;
 var CALLOUT_RE = /^(\s*(?:>\s*)+)\[!([^\]]+)\][+-]?\s*(.*)$/;
 var BLOCK_ID_RE = /\s\^[A-Za-z0-9-]+\s*$/;
 var REMOTE_RE = /^[a-z][a-z0-9+.-]*:/i;
+var DRAWING_NAME_RE = /\.excalidraw(?:\.(?:dark|light))?(?:\.[a-z0-9]+)?$/i;
+var DRAWING_KEY_RE = /^excalidraw-plugin\s*:/m;
+var BARE_PREFIX_RE = /^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d+[.)])[ \t]*(?:\[.\][ \t]*)?)?$/;
+function isDrawingNote(markdown) {
+  const frontmatterLength = markdown.length - stripFrontmatter(markdown).length;
+  return DRAWING_KEY_RE.test(markdown.slice(0, frontmatterLength));
+}
 function stripComments(markdown) {
   const out = [];
   let fence = null;
@@ -977,6 +821,7 @@ function sizeAttr(alias) {
 async function convertEmbed(inner, fromPath, ctx, standalone) {
   const { linkpath, subpath, alias } = splitTarget(inner);
   const decoded = decodeTarget(linkpath);
+  if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return "";
   if (REMOTE_RE.test(decoded)) return `![](${imageRef(decoded)})${sizeAttr(alias)}`;
   const resolved = linkpath === "" ? { path: fromPath, kind: "markdown" } : ctx.resolver.resolveLink(decoded, fromPath);
   if (!resolved) {
@@ -995,7 +840,9 @@ async function convertEmbed(inner, fromPath, ctx, standalone) {
     ctx.issues.push({ kind: "cycle", target: inner });
     return "";
   }
-  let content = extractBody(await ctx.resolver.readNote(resolved.path), ctx.sigilChar).body;
+  const raw = await ctx.resolver.readNote(resolved.path);
+  if (ctx.skipDrawings && isDrawingNote(raw)) return "";
+  let content = extractBody(raw, ctx.sigilChar).body;
   if (subpath !== "") {
     const section = extractSubpath(content, subpath);
     if (section === null) {
@@ -1027,6 +874,7 @@ async function convertSegment(segment, fromPath, ctx, standalone) {
   out += segment.slice(last);
   out = out.replace(MD_IMAGE_RE, (whole, alt, target, title) => {
     const decoded = decodeTarget(target);
+    if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return "";
     if (REMOTE_RE.test(decoded) || decoded.startsWith("/") || decoded.startsWith("assets/")) return whole;
     const resolved = ctx.resolver.resolveLink(decoded, fromPath);
     if (!resolved || resolved.kind !== "image") {
@@ -1069,12 +917,13 @@ async function convertText(markdown, fromPath, ctx) {
       const part = (_d = parts[i]) != null ? _d : "";
       rebuilt += i % 2 === 1 ? part : await convertSegment(part, fromPath, ctx, standalone);
     }
+    if (ctx.skipDrawings && rebuilt !== line && BARE_PREFIX_RE.test(rebuilt)) continue;
     out.push(rebuilt);
   }
   return out.join("\n");
 }
-async function toPandocMarkdown(body, fromPath, sigilChar, resolver) {
-  const ctx = { sigilChar, resolver, issues: [], stack: [fromPath] };
+async function toPandocMarkdown(body, fromPath, sigilChar, resolver, options = {}) {
+  const ctx = { sigilChar, resolver, issues: [], stack: [fromPath], skipDrawings: options.skipDrawings === true };
   const markdown = await convertText(body, fromPath, ctx);
   return { markdown: collapseBlankRuns(markdown), issues: ctx.issues };
 }
@@ -1095,10 +944,170 @@ function collapseBlankRuns(markdown) {
   return out.join("\n");
 }
 
+// src/core/preambles.ts
+var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.75in, includehead, includefoot, marginparwidth=.75in, marginparsep=.125in]{geometry}
+\setlength{\parskip}{.15in}
+\usepackage{enumitem}
+\setlist{itemsep=2pt, parsep=0pt, topsep=4pt}
+\usepackage{hyperref}
+
+\RequirePackage{datetime}
+\settimeformat{ampmtime}
+\newdateformat{dashdate}{\THEYEAR-\twodigit{\THEMONTH}-\twodigit{\THEDAY}}
+\newtimeformat{dottime}{\twodigit{\THEHOUR}:\twodigit{\THEMINUTE}:\twodigit{\THESECOND}}
+
+\RequirePackage{lastpage}    %% Required for pages of page number
+\RequirePackage{fancyhdr}   %must come after geometry
+\setlength{\headheight}{16pt}   %fancyhdr wants >= 13.6pt for the \small bold header at 12pt, ~15pt with an emoji in it
+\RequirePackage{etoolbox}
+\pagestyle{fancy}
+\renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
+
+% Per-note values, set by Render Doc's meta.tex from the note's frontmatter
+% (title, titleshort, author, class, coursenum, prof, date). Empty when absent; the
+% header title falls back to \jobname, the short title to the title.
+\providecommand{\DocTitle}{}
+\providecommand{\DocShortTitle}{}
+\providecommand{\DocAuthor}{}
+\providecommand{\DocClass}{}
+\providecommand{\DocClassNum}{}
+\providecommand{\DocProf}{}
+\providecommand{\DocDate}{}
+\newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
+\newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderTitle}{\DocShortTitle}}
+
+`;
+var COVER_PAGE = String.raw`
+% Cover page (pandoc calls \maketitle at the start of the document).
+\newcommand{\CoverLine}[1]{\ifdefempty{#1}{}{#1\par\medskip}}
+\renewcommand{\maketitle}{%
+  \pagenumbering{Alph}%
+  \thispagestyle{empty}%
+  \begin{center}
+    \vspace*{\dimexpr .25\textheight - 1in\relax}
+    \parbox{.56\textwidth}{\centering\LARGE \HeaderTitle\par}\par
+    \vspace{.12\textheight}
+    {\large \DocAuthor\par}
+    \vfill
+    {\large \CoverLine{\DocClass}\CoverLine{\DocClassNum}\CoverLine{\DocProf}\CoverLine{\DocDate}}
+  \end{center}
+  \clearpage
+  \pagenumbering{arabic}%
+}
+`;
+var TABLE_LINES = String.raw`
+% Light grey rule between table rows. Just the color setup lives here — the
+% actual \hline-per-row is inserted into the generated .tex body by the
+% renderer's rowlines.py, since longtable's internal row-end machinery
+% actively resists doing this via a preamble hook.
+\usepackage{colortbl}
+\definecolor{rowline}{gray}{0.75}
+% Extra row height so the rules clear accents (hats, bars) on symbols.
+\renewcommand{\arraystretch}{1.3}
+`;
+var NO_TITLE = String.raw`
+% No title page in Dev (pandoc calls \maketitle at the start of the document).
+\renewcommand{\maketitle}{}
+`;
+var DEV_HEADER = String.raw`
+% Dev: title and author in the header; page x of y and a date/time stamp in the footer.
+\fancyhead{} % clear all header fields
+\fancyhead[L]{\small{\textbf{\HeaderTitle}}}
+\fancyhead[R]{\small{\DocAuthor}}
+\fancyfoot{}
+\fancyfoot[L]{\scriptsize{\thepage\ of \pageref{LastPage}}}
+\fancyfoot[R]{\scriptsize{\dashdate{\today} at \dottime}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+`;
+var SUBMIT_HEADER = String.raw`
+% Submit: short title (bold) and author in the header; page x of y centred; no date/time stamp.
+\fancyhead{} % clear all header fields
+\fancyhead[L]{\small{\textbf{\HeaderShortTitle}}}
+\fancyhead[R]{\small{\DocAuthor}}
+\fancyfoot{}
+\fancyfoot[C]{\scriptsize{\thepage\ of \pageref{LastPage}}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+`;
+var DEFAULT_DEV_PREAMBLE = `${COMMON}${NO_TITLE}${DEV_HEADER}${TABLE_LINES}`;
+var DEFAULT_SUBMIT_PREAMBLE = `${COMMON}${COVER_PAGE}${SUBMIT_HEADER}${TABLE_LINES}`;
+function preambleFingerprint(text2) {
+  let h = 2166136261;
+  for (let i = 0; i < text2.length; i++) {
+    h ^= text2.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a", "00249892", "7a81154c"]);
+
+// src/core/settings.ts
+var FONT_SIZES = [8, 9, 10, 11, 12, 14, 17, 20];
+var DEFAULT_FONT_SIZE = 12;
+function isFontSize(value) {
+  return typeof value === "number" && FONT_SIZES.includes(value);
+}
+function documentClassFor(size) {
+  return size === 10 || size === 11 || size === 12 ? "article" : "extarticle";
+}
+var DEFAULT_PARENT_DIR = "~/Library/CloudStorage/Dropbox/_Schar/Classes";
+var DEFAULT_SETTINGS = {
+  defaultAuthor: "Joshua S. Glazer",
+  defaultParentDir: DEFAULT_PARENT_DIR,
+  devPreamble: DEFAULT_DEV_PREAMBLE,
+  submitPreamble: DEFAULT_SUBMIT_PREAMBLE,
+  lineNumbers: false,
+  mode: "dev",
+  openFolder: false,
+  fontSize: DEFAULT_FONT_SIZE
+};
+function text(value, fallback) {
+  return typeof value === "string" ? value : fallback;
+}
+function preamble(value, fallback) {
+  if (typeof value !== "string" || value.trim() === "") return fallback;
+  return RETIRED_DEFAULT_FINGERPRINTS.has(preambleFingerprint(value)) ? fallback : value;
+}
+function settingsToSave(settings) {
+  return {
+    ...settings,
+    devPreamble: settings.devPreamble === DEFAULT_DEV_PREAMBLE ? "" : settings.devPreamble,
+    submitPreamble: settings.submitPreamble === DEFAULT_SUBMIT_PREAMBLE ? "" : settings.submitPreamble
+  };
+}
+function mergeSettings(saved) {
+  const s = saved !== null && typeof saved === "object" ? saved : {};
+  return {
+    defaultAuthor: text(s.defaultAuthor, DEFAULT_SETTINGS.defaultAuthor),
+    defaultParentDir: text(s.defaultParentDir, DEFAULT_SETTINGS.defaultParentDir),
+    devPreamble: preamble(s.devPreamble, DEFAULT_SETTINGS.devPreamble),
+    submitPreamble: preamble(s.submitPreamble, DEFAULT_SETTINGS.submitPreamble),
+    lineNumbers: typeof s.lineNumbers === "boolean" ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
+    mode: s.mode === "submit" ? "submit" : "dev",
+    openFolder: typeof s.openFolder === "boolean" ? s.openFolder : DEFAULT_SETTINGS.openFolder,
+    fontSize: isFontSize(s.fontSize) ? s.fontSize : DEFAULT_SETTINGS.fontSize
+  };
+}
+function expandHome(dir, home) {
+  const d = dir.trim();
+  if (d === "~") return home.replace(/\/+$/, "");
+  return d.startsWith("~/") ? `${home.replace(/\/+$/, "")}/${d.slice(2)}` : d;
+}
+function initialParentDir(settings, home) {
+  return expandHome(settings.defaultParentDir.trim() !== "" ? settings.defaultParentDir : DEFAULT_PARENT_DIR, home);
+}
+function preambleFor(settings, mode) {
+  return mode === "submit" ? settings.submitPreamble : settings.devPreamble;
+}
+function lineNumbersAllowed(mode) {
+  return mode === "dev";
+}
+
 // src/core/tags.ts
 var TOKEN_RE = /(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|(?<![\\$])\$(?=\S)[^$]*?(?<=\S)\$(?!\d)|(^|[ \t]+)#([\p{L}\p{N}_/-]+)/gu;
 var ALL_DIGITS_RE = /^\p{N}+$/u;
-var BARE_PREFIX_RE = /^[ \t]*(?:>[ \t]*)*(?:#{1,6}[ \t]*|(?:[-*+]|\d+[.)])[ \t]*(?:\[.\][ \t]*)?)?$/;
+var BARE_PREFIX_RE2 = /^[ \t]*(?:>[ \t]*)*(?:#{1,6}[ \t]*|(?:[-*+]|\d+[.)])[ \t]*(?:\[.\][ \t]*)?)?$/;
 var INDENTED_CODE_RE2 = /^(?: {4}|\t)/;
 var LIST_ITEM_RE2 = /^[ \t]*(?:[-*+]|\d+[.)])[ \t]/;
 function stripLineTags(line) {
@@ -1111,7 +1120,7 @@ function stripLineTags(line) {
     return "";
   });
   if (!found) return line;
-  if (BARE_PREFIX_RE.test(stripped)) return null;
+  if (BARE_PREFIX_RE2.test(stripped)) return null;
   return atStart ? stripped.trimStart() : stripped;
 }
 function stripTags(markdown) {
@@ -1159,24 +1168,29 @@ async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
   const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
   const citations = replaceCitations(separateBlocks(converted.markdown), index);
   const markdown = stripMarkers(citations.markdown);
+  const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
+  const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
   return {
     markdown,
     numberedMarkdown: markersToLatex(citations.markdown),
-    submitMarkdown: stripTags(markdown),
+    submit: { markdown: stripTags(stripMarkers(submitCitations.markdown)), citations: submitCitations, issues: submitConverted.issues },
     citations,
     issues: converted.issues,
     outlineLinesStripped: extraction.outlineLinesStripped,
     isEmpty: extraction.isEmpty
   };
 }
+function versionOf(prepared, mode) {
+  return mode === "submit" ? prepared.submit : prepared;
+}
 var PREAMBLE_FILE = "preamble.tex";
 var BIB_FILE = "refs.bib";
 function buildFiles(prepared, meta, target, options = {}) {
-  var _a, _b;
-  const cites = prepared.citations.citekeys.length > 0;
-  const fontSize = (_a = options.fontSize) != null ? _a : DEFAULT_FONT_SIZE;
-  const numbered = options.lineNumbers === true && lineNumbersAllowed((_b = options.mode) != null ? _b : "dev");
-  const body = numbered ? prepared.numberedMarkdown : options.mode === "submit" ? prepared.submitMarkdown : prepared.markdown;
+  var _a, _b, _c;
+  const cites = versionOf(prepared, (_a = options.mode) != null ? _a : "dev").citations.citekeys.length > 0;
+  const fontSize = (_b = options.fontSize) != null ? _b : DEFAULT_FONT_SIZE;
+  const numbered = options.lineNumbers === true && lineNumbersAllowed((_c = options.mode) != null ? _c : "dev");
+  const body = numbered ? prepared.numberedMarkdown : options.mode === "submit" ? prepared.submit.markdown : prepared.markdown;
   const files = {
     "source.md": `${body}
 `,
@@ -1199,6 +1213,9 @@ function buildFiles(prepared, meta, target, options = {}) {
   };
   return { files, job };
 }
+
+// src/export/exporter.ts
+var import_obsidian = require("obsidian");
 
 // src/core/zotero.ts
 function groupKeysByLibrary(keys, known) {
@@ -1892,7 +1909,7 @@ var RenderExporter = class {
       return fail("folder", `${target.target} appeared after the dialog checked, so nothing was written. Render again to overwrite it.`);
     }
     let bib = "";
-    const keys = plan.prepared.citations.citekeys;
+    const keys = versionOf(plan.prepared, plan.mode).citations.citekeys;
     if (keys.length > 0) {
       progress("Fetching the bibliography from Zotero\u2026");
       const fetched = await fetchBibLaTeX(zoteroManagerApi(this.app), keys);
@@ -1951,6 +1968,7 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.parentText = null;
     this.folderText = null;
     this.lineNumbersEl = null;
+    this.summaryEl = null;
   }
   onOpen() {
     const { contentEl, plan } = this;
@@ -1958,13 +1976,14 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.titleEl.addClass("render-doc-title");
     this.showMode();
     contentEl.addClass("render-doc-modal");
-    new import_obsidian2.Setting(contentEl).setName("Version").setDesc("Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp, #tags left out.").addDropdown(
+    new import_obsidian2.Setting(contentEl).setName("Version").setDesc("Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp, #tags and drawings left out.").addDropdown(
       (d) => d.addOption("dev", "Dev").addOption("submit", "Submit").setValue(plan.mode).onChange((v) => {
         var _a;
         plan.mode = v;
         plan.folderName = folderNameFor(plan.folderName, plan.mode);
         (_a = this.folderText) == null ? void 0 : _a.setValue(plan.folderName);
         this.showMode();
+        this.renderSummary();
         this.refresh();
       })
     );
@@ -2021,7 +2040,8 @@ var RenderModal = class extends import_obsidian2.Modal {
         plan.openFolder = v;
       })
     );
-    this.renderSummary(contentEl.createDiv({ cls: "render-doc-summary" }));
+    this.summaryEl = contentEl.createDiv({ cls: "render-doc-summary" });
+    this.renderSummary();
     new import_obsidian2.Setting(contentEl).addButton((b) => {
       b.setButtonText("Render").setCta().onClick(() => {
         const check = this.hooks.check(plan);
@@ -2053,9 +2073,12 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.statusEl.toggleClass("mod-warning", check.ok && check.exists);
     this.statusEl.setText(!check.ok ? check.message : check.exists ? check.warning : `Will create ${check.target}`);
   }
-  renderSummary(el) {
-    const { discovery, prepared } = this.plan;
-    const { citations } = prepared;
+  renderSummary() {
+    const el = this.summaryEl;
+    if (!el) return;
+    el.empty();
+    const { discovery, prepared, mode } = this.plan;
+    const { citations, issues } = versionOf(prepared, mode);
     const scope = discovery.roots.length === 0 ? "no folders" : discovery.roots.map((r) => r === "" ? "/" : r).join(", ");
     el.createEl("h4", { text: "Summary" });
     const list = el.createEl("ul");
@@ -2070,7 +2093,7 @@ var RenderModal = class extends import_obsidian2.Modal {
     const warnings = [
       ...discovery.warnings,
       ...citations.unmatched.map((u) => `${u.text} \u2014 ${u.message}`),
-      ...prepared.issues.map((i) => `${i.kind} embed or link: ${i.target}`)
+      ...issues.map((i) => `${i.kind} embed or link: ${i.target}`)
     ];
     if (warnings.length === 0) return;
     el.createEl("h4", { text: "Warnings" });
@@ -2231,7 +2254,7 @@ var RenderDocPlugin = class extends import_obsidian4.Plugin {
 Log: ${where}` : ""}`, ERROR_NOTICE_MS);
         return;
       }
-      const unmatched = plan.prepared.citations.unmatched.length;
+      const unmatched = versionOf(plan.prepared, plan.mode).citations.unmatched.length;
       const tail = unmatched > 0 ? `
 ${unmatched} citation${unmatched === 1 ? " is" : "s are"} ${plan.hideUnmatched ? "unmatched (not highlighted)" : "highlighted as unmatched"}.` : "";
       new import_obsidian4.Notice(`Rendered to ${outcome.folder}${tail}`, 1e4);

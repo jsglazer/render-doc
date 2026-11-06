@@ -18,8 +18,12 @@
 //   ![alt](img.png)         vault-relative image staged like an embed
 //   [text](Other.md)        plain text (no dead links in the PDF)
 //   [text](https://…)       kept as a link
+//
+// With skipDrawings (the Submit copy, Update006), an Excalidraw drawing embedded
+// as a note, a .excalidraw file or an exported image prints nothing, and a line
+// left empty by that goes entirely.
 
-import { extractBody, nextFenceState } from './exportBody';
+import { extractBody, nextFenceState, stripFrontmatter } from './exportBody';
 
 export interface ResolvedLink {
 	path: string; // vault path
@@ -52,6 +56,15 @@ const MD_LINK_RE = /\[([^\]]*)\]\(\s*(<[^>]+>|[^)\s]+)(?:\s+"[^"]*")?\s*\)/g;
 const CALLOUT_RE = /^(\s*(?:>\s*)+)\[!([^\]]+)\][+-]?\s*(.*)$/;
 const BLOCK_ID_RE = /\s\^[A-Za-z0-9-]+\s*$/;
 const REMOTE_RE = /^[a-z][a-z0-9+.-]*:/i;
+// Name.excalidraw, Name.excalidraw.md, Name.excalidraw.png, Name.excalidraw.dark.svg…
+const DRAWING_NAME_RE = /\.excalidraw(?:\.(?:dark|light))?(?:\.[a-z0-9]+)?$/i;
+const DRAWING_KEY_RE = /^excalidraw-plugin\s*:/m;
+const BARE_PREFIX_RE = /^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d+[.)])[ \t]*(?:\[.\][ \t]*)?)?$/;
+
+function isDrawingNote(markdown: string): boolean {
+	const frontmatterLength = markdown.length - stripFrontmatter(markdown).length;
+	return DRAWING_KEY_RE.test(markdown.slice(0, frontmatterLength));
+}
 
 // Removes %%comments%%, which may open on one line and close on a later one.
 // A line that held nothing but comment disappears entirely, so it can't turn
@@ -177,11 +190,13 @@ interface Context {
 	resolver: ExportResolver;
 	issues: ConversionIssue[];
 	stack: string[];
+	skipDrawings: boolean;
 }
 
 async function convertEmbed(inner: string, fromPath: string, ctx: Context, standalone: boolean): Promise<string> {
 	const { linkpath, subpath, alias } = splitTarget(inner);
 	const decoded = decodeTarget(linkpath);
+	if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return '';
 	if (REMOTE_RE.test(decoded)) return `![](${imageRef(decoded)})${sizeAttr(alias)}`;
 
 	const resolved = linkpath === '' ? { path: fromPath, kind: 'markdown' as const } : ctx.resolver.resolveLink(decoded, fromPath);
@@ -201,7 +216,9 @@ async function convertEmbed(inner: string, fromPath: string, ctx: Context, stand
 		ctx.issues.push({ kind: 'cycle', target: inner });
 		return '';
 	}
-	let content = extractBody(await ctx.resolver.readNote(resolved.path), ctx.sigilChar).body;
+	const raw = await ctx.resolver.readNote(resolved.path);
+	if (ctx.skipDrawings && isDrawingNote(raw)) return '';
+	let content = extractBody(raw, ctx.sigilChar).body;
 	if (subpath !== '') {
 		const section = extractSubpath(content, subpath);
 		if (section === null) {
@@ -232,6 +249,7 @@ async function convertSegment(segment: string, fromPath: string, ctx: Context, s
 
 	out = out.replace(MD_IMAGE_RE, (whole, alt: string, target: string, title: string) => {
 		const decoded = decodeTarget(target);
+		if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return '';
 		if (REMOTE_RE.test(decoded) || decoded.startsWith('/') || decoded.startsWith('assets/')) return whole;
 		const resolved = ctx.resolver.resolveLink(decoded, fromPath);
 		if (!resolved || resolved.kind !== 'image') {
@@ -274,6 +292,7 @@ async function convertText(markdown: string, fromPath: string, ctx: Context): Pr
 			const part = parts[i] ?? '';
 			rebuilt += i % 2 === 1 ? part : await convertSegment(part, fromPath, ctx, standalone);
 		}
+		if (ctx.skipDrawings && rebuilt !== line && BARE_PREFIX_RE.test(rebuilt)) continue;
 		out.push(rebuilt);
 	}
 	return out.join('\n');
@@ -284,8 +303,9 @@ export async function toPandocMarkdown(
 	fromPath: string,
 	sigilChar: string,
 	resolver: ExportResolver,
+	options: { skipDrawings?: boolean } = {},
 ): Promise<ConversionResult> {
-	const ctx: Context = { sigilChar, resolver, issues: [], stack: [fromPath] };
+	const ctx: Context = { sigilChar, resolver, issues: [], stack: [fromPath], skipDrawings: options.skipDrawings === true };
 	const markdown = await convertText(body, fromPath, ctx);
 	return { markdown: collapseBlankRuns(markdown), issues: ctx.issues };
 }

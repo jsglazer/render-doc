@@ -21,7 +21,9 @@ import { stripTags } from './tags';
 export interface PreparedDocument {
 	markdown: string; // pandoc Markdown with raw \autocite / \rdunmatched spans
 	numberedMarkdown: string; // the same, plus raw \rdln{<Obsidian line>} spans
-	submitMarkdown: string; // the same as markdown, minus #tags (src/core/tags.ts)
+	// The Submit copy: no Excalidraw drawings and no #tags (src/core/tags.ts). A
+	// drawing's text can hold citations and failed embeds, so it keeps its own.
+	submit: { markdown: string; citations: CitationResult; issues: ConversionIssue[] };
 	citations: CitationResult;
 	issues: ConversionIssue[];
 	outlineLinesStripped: number;
@@ -43,15 +45,22 @@ export async function prepareDocument(
 	const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
 	const citations = replaceCitations(separateBlocks(converted.markdown), index);
 	const markdown = stripMarkers(citations.markdown);
+	const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
+	const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
 	return {
 		markdown,
 		numberedMarkdown: markersToLatex(citations.markdown),
-		submitMarkdown: stripTags(markdown),
+		submit: { markdown: stripTags(stripMarkers(submitCitations.markdown)), citations: submitCitations, issues: submitConverted.issues },
 		citations,
 		issues: converted.issues,
 		outlineLinesStripped: extraction.outlineLinesStripped,
 		isEmpty: extraction.isEmpty,
 	};
+}
+
+// The citations and embed problems of the copy being rendered.
+export function versionOf(prepared: PreparedDocument, mode: RenderMode): { citations: CitationResult; issues: ConversionIssue[] } {
+	return mode === 'submit' ? prepared.submit : prepared;
 }
 
 // renderer/render-pdf.sh reads this (see renderer/job.py for every field).
@@ -88,10 +97,10 @@ export function buildFiles(
 	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
 	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean; hideUnmatched?: boolean; fontSize?: FontSize } = {},
 ): BuildFiles {
-	const cites = prepared.citations.citekeys.length > 0;
+	const cites = versionOf(prepared, options.mode ?? 'dev').citations.citekeys.length > 0;
 	const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
 	const numbered = options.lineNumbers === true && lineNumbersAllowed(options.mode ?? 'dev');
-	const body = numbered ? prepared.numberedMarkdown : options.mode === 'submit' ? prepared.submitMarkdown : prepared.markdown;
+	const body = numbered ? prepared.numberedMarkdown : options.mode === 'submit' ? prepared.submit.markdown : prepared.markdown;
 	const files: Record<string, string> = {
 		'source.md': `${body}\n`,
 		'meta.tex': metaHeader(meta),

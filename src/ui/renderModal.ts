@@ -20,6 +20,7 @@ import { folderNameFor } from '../core/document';
 import { PAGE_BREAK_SKIP_LINES } from '../core/exportBody';
 import type { RenderMode } from '../core/settings';
 import { FONT_SIZES, isFontSize, lineNumbersAllowed } from '../core/settings';
+import { versionOf } from '../core/render';
 import type { RenderPlan } from '../export/exporter';
 
 export interface RenderModalHooks {
@@ -34,6 +35,7 @@ export class RenderModal extends Modal {
 	private parentText: { setValue(value: string): unknown } | null = null;
 	private folderText: { setValue(value: string): unknown } | null = null;
 	private lineNumbersEl: HTMLElement | null = null;
+	private summaryEl: HTMLElement | null = null;
 
 	constructor(
 		app: App,
@@ -52,7 +54,7 @@ export class RenderModal extends Modal {
 
 		new Setting(contentEl)
 			.setName('Version')
-			.setDesc('Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp, #tags left out.')
+			.setDesc('Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp, #tags and drawings left out.')
 			.addDropdown((d) =>
 				d
 					.addOption('dev', 'Dev')
@@ -63,6 +65,7 @@ export class RenderModal extends Modal {
 						plan.folderName = folderNameFor(plan.folderName, plan.mode);
 						this.folderText?.setValue(plan.folderName);
 						this.showMode();
+						this.renderSummary();
 						this.refresh();
 					}),
 			);
@@ -148,7 +151,8 @@ export class RenderModal extends Modal {
 				}),
 			);
 
-		this.renderSummary(contentEl.createDiv({ cls: 'render-doc-summary' }));
+		this.summaryEl = contentEl.createDiv({ cls: 'render-doc-summary' });
+		this.renderSummary();
 
 		new Setting(contentEl)
 			.addButton((b) => {
@@ -188,9 +192,12 @@ export class RenderModal extends Modal {
 		this.statusEl.setText(!check.ok ? check.message : check.exists ? check.warning : `Will create ${check.target}`);
 	}
 
-	private renderSummary(el: HTMLElement): void {
-		const { discovery, prepared } = this.plan;
-		const { citations } = prepared;
+	private renderSummary(): void {
+		const el = this.summaryEl;
+		if (!el) return;
+		el.empty();
+		const { discovery, prepared, mode } = this.plan;
+		const { citations, issues } = versionOf(prepared, mode);
 		const scope = discovery.roots.length === 0 ? 'no folders' : discovery.roots.map((r) => (r === '' ? '/' : r)).join(', ');
 		el.createEl('h4', { text: 'Summary' });
 		const list = el.createEl('ul');
@@ -206,7 +213,7 @@ export class RenderModal extends Modal {
 		const warnings = [
 			...discovery.warnings,
 			...citations.unmatched.map((u) => `${u.text} — ${u.message}`),
-			...prepared.issues.map((i) => `${i.kind} embed or link: ${i.target}`),
+			...issues.map((i) => `${i.kind} embed or link: ${i.target}`),
 		];
 		if (warnings.length === 0) return;
 		el.createEl('h4', { text: 'Warnings' });
