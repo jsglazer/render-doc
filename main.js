@@ -580,6 +580,7 @@ var BIBLIOGRAPHY_TRAILER = "\\clearpage\n\\printbibliography[heading=rdreference
 
 // src/core/sources.ts
 var CITE_SOURCES_KEY = "cite-sources";
+var SOURCES_FOLDER = "Sources";
 function normalizeCiteshort(text2) {
   return text2.normalize("NFC").trim().replace(/\s+/g, " ");
 }
@@ -622,7 +623,15 @@ function resolveScope(notePath, citeSourcesRaw, folderExists) {
     warnings.push(`The folder above this note is the vault root, so only ${noteFolder} was searched for source notes.`);
     return { roots: [noteFolder], warnings };
   }
-  return { roots: [oneUp], warnings };
+  const sources = nearestSourcesFolder(noteFolder, folderExists);
+  return { roots: sources !== null && !inScope(sources, [oneUp]) ? [oneUp, sources] : [oneUp], warnings };
+}
+function nearestSourcesFolder(noteFolder, folderExists) {
+  for (let folder = noteFolder; folder !== ""; folder = parentFolder(folder)) {
+    const candidate = `${folder}/${SOURCES_FOLDER}`;
+    if (folderExists(candidate)) return candidate;
+  }
+  return null;
 }
 function inScope(path, roots) {
   return roots.some((root) => root === "" || path.startsWith(`${root}/`));

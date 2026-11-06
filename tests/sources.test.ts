@@ -79,6 +79,41 @@ describe('resolveScope', () => {
 		expect(resolveScope(NOTE, undefined, exists)).toEqual({ roots: ['Classes/2026-B/POGO 801/Assign'], warnings: [] });
 	});
 
+	describe('a Sources folder above the note (Update005)', () => {
+		const NESTED = 'Classes/2026-B/RD/Assign/Asgn03/Paper.md';
+		const having = (...folders: string[]) => (f: string) => folders.includes(f);
+
+		it('adds the class-level Sources folder to the default scope', () => {
+			const r = resolveScope(NESTED, undefined, having('Classes/2026-B/RD/Assign', 'Classes/2026-B/RD/Sources'));
+			expect(r).toEqual({ roots: ['Classes/2026-B/RD/Assign', 'Classes/2026-B/RD/Sources'], warnings: [] });
+		});
+		it('finds it from a note at any depth', () => {
+			const r = resolveScope('Classes/2026-B/RD/Assign/A/B/C/Paper.md', undefined, having('Classes/2026-B/RD/Assign/A/B', 'Classes/2026-B/RD/Sources'));
+			expect(r.roots).toEqual(['Classes/2026-B/RD/Assign/A/B', 'Classes/2026-B/RD/Sources']);
+		});
+		it('uses only the nearest one', () => {
+			const r = resolveScope(NESTED, undefined, having('Classes/2026-B/RD/Assign', 'Classes/2026-B/RD/Sources', 'Classes/2026-B/Sources'));
+			expect(r.roots).toEqual(['Classes/2026-B/RD/Assign', 'Classes/2026-B/RD/Sources']);
+		});
+		it('adds nothing when the nearest one is already in scope', () => {
+			const r = resolveScope(NESTED, undefined, having('Classes/2026-B/RD/Assign', 'Classes/2026-B/RD/Assign/Sources', 'Classes/2026-B/RD/Sources'));
+			expect(r.roots).toEqual(['Classes/2026-B/RD/Assign']);
+		});
+		it('never picks up a Sources folder at the vault root', () => {
+			const r = resolveScope(NESTED, undefined, having('Classes/2026-B/RD/Assign', 'Sources'));
+			expect(r.roots).toEqual(['Classes/2026-B/RD/Assign']);
+		});
+		it('is not used when cite-sources names a folder', () => {
+			const r = resolveScope(NESTED, 'Library', having('Library', 'Classes/2026-B/RD/Sources'));
+			expect(r.roots).toEqual(['Library']);
+		});
+		it('resolves citations from the class Sources folder', () => {
+			const notes = [source('Classes/2026-B/RD/Sources/B.md', 'Bonica-2018', 'Bonica, 2018')];
+			const d = discoverSources(NESTED, undefined, notes, having('Classes/2026-B/RD/Assign', 'Classes/2026-B/RD/Sources'));
+			expect(d.index.get('Bonica, 2018')).toEqual([{ citekey: 'Bonica-2018', path: 'Classes/2026-B/RD/Sources/B.md' }]);
+		});
+	});
+
 	it("searches the note's own folder, with a warning, when one level up is the vault root", () => {
 		const r = resolveScope('Top/Paper.md', undefined, exists);
 		expect(r.roots).toEqual(['Top']);

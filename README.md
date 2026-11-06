@@ -62,7 +62,7 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 | Frontmatter of the note being rendered | Folders searched |
 | --- | --- |
 | `cite-sources: Classes/2026-B/Sources` (a string or a list) | Exactly those folders and their subfolders. Use `/` for the whole vault. |
-| no `cite-sources:` | The folder tree one level above the note's folder. |
+| no `cite-sources:` | The folder tree one level above the note's folder, plus the nearest `Sources` folder sitting beside any folder above the note, such as `Classes/2026-B/POGO 801/Sources` for a note in `POGO 801/Assign/Asgn03/`. A `Sources` folder at the vault root doesn't count. |
 | no `cite-sources:`, and that level is the vault root | Only the note's own folder tree, with a warning. The vault root is never searched unless you ask for it. |
 
 ### Citation rules

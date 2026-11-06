@@ -10,9 +10,12 @@
 // Scope (Developer Decisions "Source scope key" and "Fallback scope"):
 //   cite-sources: a vault-relative folder path, or a list of them. `/` names
 //                 the vault root, and only an explicit `/` ever scans it.
-//   no cite-sources: the folder tree rooted one level above the note's folder.
-//                 If that is the vault root, the note's own folder tree is
-//                 searched instead, with a warning.
+//   no cite-sources: the folder tree rooted one level above the note's folder,
+//                 plus the nearest Sources folder sitting beside any folder
+//                 above the note (Update005: a class keeps one Sources folder
+//                 right under the class folder, higher than a note in
+//                 Assign/Asgn03/). If one level up is the vault root, the
+//                 note's own folder tree is searched instead, with a warning.
 
 export interface NoteMeta {
 	path: string; // vault-relative, e.g. "Classes/2026-B/Paper.md"
@@ -47,6 +50,7 @@ export interface SourceDiscovery {
 }
 
 export const CITE_SOURCES_KEY = 'cite-sources';
+export const SOURCES_FOLDER = 'Sources';
 
 // Trim, collapse internal whitespace, Unicode NFC — and nothing else: no
 // and/&, et al., or hyphen folding (Developer Decision "Matching").
@@ -103,7 +107,19 @@ export function resolveScope(
 		warnings.push(`The folder above this note is the vault root, so only ${noteFolder} was searched for source notes.`);
 		return { roots: [noteFolder], warnings };
 	}
-	return { roots: [oneUp], warnings };
+	const sources = nearestSourcesFolder(noteFolder, folderExists);
+	return { roots: sources !== null && !inScope(sources, [oneUp]) ? [oneUp, sources] : [oneUp], warnings };
+}
+
+// Walks up from the note's folder for the first <folder>/Sources. A Sources
+// folder at the vault root is never picked up: only an explicit `/` or
+// cite-sources reaches that high.
+function nearestSourcesFolder(noteFolder: string, folderExists: (folder: string) => boolean): string | null {
+	for (let folder = noteFolder; folder !== ''; folder = parentFolder(folder)) {
+		const candidate = `${folder}/${SOURCES_FOLDER}`;
+		if (folderExists(candidate)) return candidate;
+	}
+	return null;
 }
 
 export function inScope(path: string, roots: readonly string[]): boolean {
