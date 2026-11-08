@@ -398,6 +398,13 @@ var LINE_NUMBERS = [
   "\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdln\\@gobble}\\fi",
   "\\makeatother"
 ];
+var TAG_COLOUR = [
+  "\\definecolor{rdtagcolor}{RGB}{88,24,120}",
+  "\\DeclareRobustCommand{\\rdtagtext}[1]{\\textcolor{rdtagcolor}{#1}}",
+  "\\makeatletter",
+  "\\AtBeginDocument{\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdtagtext\\@firstofone}\\fi}",
+  "\\makeatother"
+];
 function pageBreakMacro(pageBreaks) {
   return `\\newcommand{\\rdpagebreak}{${pageBreaks ? "\\clearpage" : ""}}`;
 }
@@ -420,7 +427,8 @@ function citeHeader(withBibliography, options = {}) {
   const lines = [
     "% Written by Render Doc \u2014 included AFTER the preamble.",
     ...unmatchedBlock((_a = options.hideUnmatched) != null ? _a : false),
-    pageBreakMacro((_b = options.pageBreaks) != null ? _b : false)
+    pageBreakMacro((_b = options.pageBreaks) != null ? _b : false),
+    ...TAG_COLOUR
   ];
   if (withBibliography) lines.push(...BIBLATEX);
   if (options.lineNumbers === true) lines.push(...LINE_NUMBERS);
@@ -1183,7 +1191,10 @@ function stripTags(markdown) {
 }
 var OPEN2 = "\uE002";
 var CLOSE2 = "\uE003";
+var END = "\uE004";
 var MARKER_RE2 = new RegExp(`${OPEN2}(\\d+)${CLOSE2}`, "g");
+var ANY_MARKER_RE = new RegExp(`${OPEN2}\\d+${CLOSE2}|${END}`, "g");
+var RAW_SPAN_RE = /`[^`]*`\{=latex\}/g;
 var SCAN_RE = /(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|(?<![\\$])\$(?=\S)[^$]*?(?<=\S)\$(?!\d)|\[\[[^\]]*\]\]|\]\([^)]*\)|<[a-z]+:[^>\s]*>|[a-z][a-z0-9+.-]*:\/\/\S*|(^|[ \t]+)#([\p{L}\p{N}_/-]+)/giu;
 function frontmatterEnd(lines) {
   var _a, _b;
@@ -1218,7 +1229,7 @@ function markTags(doc) {
       if (typeof name !== "string" || ALL_DIGITS_RE.test(name)) return whole;
       const id = tags.length + 1;
       tags.push({ id, tag: name, line: i + 1 });
-      return `${typeof lead === "string" ? lead : ""}${OPEN2}${id}${CLOSE2}#${name}`;
+      return `${typeof lead === "string" ? lead : ""}${OPEN2}${id}${CLOSE2}#${name}${END}`;
     });
   });
   return { doc: out.join("\n"), tags };
@@ -1226,17 +1237,20 @@ function markTags(doc) {
 function survivingTagIds(text2) {
   return new Set([...text2.matchAll(MARKER_RE2)].map((m) => Number(m[1])));
 }
-function tagMarkersToLatex(text2) {
-  return text2.replace(MARKER_RE2, (_m, n) => rawLatex(`\\rdtag{${n}}`));
+function unmarkRawSpans(text2) {
+  return text2.replace(RAW_SPAN_RE, (span) => stripTagMarkers(span));
+}
+function tagMarkersToLatex(text2, anchors) {
+  return text2.replace(MARKER_RE2, (_m, n) => rawLatex(`${anchors ? `\\rdtag{${n}}` : ""}\\rdtagtext{`)).split(END).join(rawLatex("}"));
 }
 function stripTagMarkers(text2) {
-  return text2.replace(MARKER_RE2, "");
+  return text2.replace(ANY_MARKER_RE, "");
 }
 function tagTable(tags) {
   const head = ["\\clearpage", "\\section*{\\centering Tags}\\markboth{Tags}{Tags}"];
   if (tags.length === 0) return `${[...head, "This note has no tags."].join("\n")}
 `;
-  const rows = tags.map((t) => `\\#${latexEscape(t.tag)} & \\rdtagref{${t.id}} & ${t.line}\\\\`);
+  const rows = tags.map((t) => `\\rdtagtext{\\#${latexEscape(t.tag)}} & \\rdtagref{${t.id}} & ${t.line}\\\\`);
   return `${[
     ...head,
     "\\begin{longtable}{@{}lrr@{}}",
@@ -1257,15 +1271,16 @@ async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
   const extraction = extractBody(markSourceLines(marked.doc, sigilChar), sigilChar);
   const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
   const citations = replaceCitations(separateBlocks(converted.markdown), index);
-  const printed = survivingTagIds(citations.markdown);
-  const untagged = stripTagMarkers(citations.markdown);
+  const tagMarked = unmarkRawSpans(citations.markdown);
+  const printed = survivingTagIds(tagMarked);
+  const untagged = stripTagMarkers(tagMarked);
   const markdown = stripMarkers(untagged);
   const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
   const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
   return {
     markdown,
     numberedMarkdown: markersToLatex(untagged),
-    markedMarkdown: citations.markdown,
+    markedMarkdown: tagMarked,
     tags: marked.tags.filter((t) => printed.has(t.id)),
     submit: { markdown: stripTags(stripTagMarkers(stripMarkers(submitCitations.markdown))), citations: submitCitations, issues: submitConverted.issues },
     citations,
@@ -1290,7 +1305,7 @@ function buildFiles(prepared, meta, target, options = {}) {
   if (mode === "submit") body = prepared.submit.markdown;
   else {
     const lined = numbered ? markersToLatex(prepared.markedMarkdown) : stripMarkers(prepared.markedMarkdown);
-    body = tagged ? tagMarkersToLatex(lined) : stripTagMarkers(lined);
+    body = tagMarkersToLatex(lined, tagged);
   }
   const files = {
     "source.md": `${body}

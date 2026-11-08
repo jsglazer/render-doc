@@ -17,7 +17,7 @@ import type { FontSize, RenderMode } from './settings';
 import { DEFAULT_FONT_SIZE, documentClassFor, lineNumbersAllowed, tagTableAllowed } from './settings';
 import type { CiteIndex } from './sources';
 import type { TagOccurrence } from './tags';
-import { markTags, stripTags, stripTagMarkers, survivingTagIds, tagMarkersToLatex, tagTable } from './tags';
+import { markTags, stripTags, stripTagMarkers, survivingTagIds, tagMarkersToLatex, tagTable, unmarkRawSpans } from './tags';
 
 export interface PreparedDocument {
 	markdown: string; // pandoc Markdown with raw \autocite / \rdunmatched spans
@@ -52,15 +52,16 @@ export async function prepareDocument(
 	const extraction = extractBody(markSourceLines(marked.doc, sigilChar), sigilChar);
 	const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
 	const citations = replaceCitations(separateBlocks(converted.markdown), index);
-	const printed = survivingTagIds(citations.markdown);
-	const untagged = stripTagMarkers(citations.markdown);
+	const tagMarked = unmarkRawSpans(citations.markdown);
+	const printed = survivingTagIds(tagMarked);
+	const untagged = stripTagMarkers(tagMarked);
 	const markdown = stripMarkers(untagged);
 	const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
 	const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
 	return {
 		markdown,
 		numberedMarkdown: markersToLatex(untagged),
-		markedMarkdown: citations.markdown,
+		markedMarkdown: tagMarked,
 		tags: marked.tags.filter((t) => printed.has(t.id)),
 		submit: { markdown: stripTags(stripTagMarkers(stripMarkers(submitCitations.markdown))), citations: submitCitations, issues: submitConverted.issues },
 		citations,
@@ -118,7 +119,7 @@ export function buildFiles(
 	if (mode === 'submit') body = prepared.submit.markdown;
 	else {
 		const lined = numbered ? markersToLatex(prepared.markedMarkdown) : stripMarkers(prepared.markedMarkdown);
-		body = tagged ? tagMarkersToLatex(lined) : stripTagMarkers(lined);
+		body = tagMarkersToLatex(lined, tagged);
 	}
 	const files: Record<string, string> = {
 		'source.md': `${body}\n`,

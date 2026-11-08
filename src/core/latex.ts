@@ -164,6 +164,17 @@ const LINE_NUMBERS = [
 // The body puts \rdpagebreak before each level-one heading past the note's
 // opening lines (src/core/exportBody.ts); the dialog's "Page break before
 // # headings" toggle decides whether it starts a new page.
+// Dev prints each #tag dark purple (Josh, after Update007; see
+// src/core/tags.ts); PDF bookmarks keep just the text. Defined in both modes,
+// though the Submit copy has no tags.
+export const TAG_COLOUR = [
+	'\\definecolor{rdtagcolor}{RGB}{88,24,120}',
+	'\\DeclareRobustCommand{\\rdtagtext}[1]{\\textcolor{rdtagcolor}{#1}}',
+	'\\makeatletter',
+	'\\AtBeginDocument{\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdtagtext\\@firstofone}\\fi}',
+	'\\makeatother',
+];
+
 export function pageBreakMacro(pageBreaks: boolean): string {
 	return `\\newcommand{\\rdpagebreak}{${pageBreaks ? '\\clearpage' : ''}}`;
 }
@@ -200,6 +211,7 @@ export function citeHeader(withBibliography: boolean, options: CiteHeaderOptions
 		'% Written by Render Doc — included AFTER the preamble.',
 		...unmatchedBlock(options.hideUnmatched ?? false),
 		pageBreakMacro(options.pageBreaks ?? false),
+		...TAG_COLOUR,
 	];
 	if (withBibliography) lines.push(...BIBLATEX);
 	if (options.lineNumbers === true) lines.push(...LINE_NUMBERS);

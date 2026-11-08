@@ -89,10 +89,12 @@ export function stripTags(markdown: string): string {
 // line markers (src/core/lineMarkers.ts), the placeholders ride through body
 // extraction, conversion and citation replacement; a tag on a dropped line
 // (outline entry, %% comment) takes its placeholder with it, so only tags that
-// actually print are listed. tagMarkersToLatex turns each survivor into a raw
-// \rdtag{<id>}, which records its page in the .aux file; the table reads it
-// back with \rdtagref (TAG_MACROS in src/core/latex.ts). Every other render
-// (and the Submit copy, before stripTags) drops them with stripTagMarkers.
+// actually print are listed. A second placeholder (U+E004) closes each tag.
+// In Dev, tagMarkersToLatex wraps each surviving tag in \rdtagtext{…}, which
+// prints it dark purple (Josh, after Update007), and with the table on puts a
+// raw \rdtag{<id>} in front, which records its page in the .aux file; the
+// table reads it back with \rdtagref (TAG_MACROS in src/core/latex.ts). The
+// Submit copy drops them with stripTagMarkers before stripTags.
 // Tags pulled in by an embed are not lines of this note and are not listed.
 //
 // The same tag rule as stripTags, scanned on the raw note, so it also skips
@@ -101,7 +103,12 @@ export function stripTags(markdown: string): string {
 
 const OPEN = '';
 const CLOSE = '';
+const END = '';
 const MARKER_RE = new RegExp(`${OPEN}(\\d+)${CLOSE}`, 'g');
+const ANY_MARKER_RE = new RegExp(`${OPEN}\\d+${CLOSE}|${END}`, 'g');
+// A pandoc raw inline LaTeX span: a tag inside one (an unmatched citation's
+// text) can be neither coloured nor anchored, so its placeholders go.
+const RAW_SPAN_RE = /`[^`]*`\{=latex\}/g;
 
 export interface TagOccurrence {
 	id: number;
@@ -152,7 +159,7 @@ export function markTags(doc: string): MarkedTags {
 			if (typeof name !== 'string' || ALL_DIGITS_RE.test(name)) return whole;
 			const id = tags.length + 1;
 			tags.push({ id, tag: name, line: i + 1 });
-			return `${typeof lead === 'string' ? lead : ''}${OPEN}${id}${CLOSE}#${name}`;
+			return `${typeof lead === 'string' ? lead : ''}${OPEN}${id}${CLOSE}#${name}${END}`;
 		});
 	});
 	return { doc: out.join('\n'), tags };
@@ -163,12 +170,21 @@ export function survivingTagIds(text: string): Set<number> {
 	return new Set([...text.matchAll(MARKER_RE)].map((m) => Number(m[1])));
 }
 
-export function tagMarkersToLatex(text: string): string {
-	return text.replace(MARKER_RE, (_m, n: string) => rawLatex(`\\rdtag{${n}}`));
+// Drops the placeholders that ended up inside raw LaTeX spans.
+export function unmarkRawSpans(text: string): string {
+	return text.replace(RAW_SPAN_RE, (span) => stripTagMarkers(span));
+}
+
+// `anchors`: also put \rdtag{<id>} in front, for the tag table's page numbers.
+export function tagMarkersToLatex(text: string, anchors: boolean): string {
+	return text
+		.replace(MARKER_RE, (_m, n: string) => rawLatex(`${anchors ? `\\rdtag{${n}}` : ''}\\rdtagtext{`))
+		.split(END)
+		.join(rawLatex('}'));
 }
 
 export function stripTagMarkers(text: string): string {
-	return text.replace(MARKER_RE, '');
+	return text.replace(ANY_MARKER_RE, '');
 }
 
 // The table after the References (or at the end when the note cites nothing):
@@ -176,7 +192,7 @@ export function stripTagMarkers(text: string): string {
 export function tagTable(tags: TagOccurrence[]): string {
 	const head = ['\\clearpage', '\\section*{\\centering Tags}\\markboth{Tags}{Tags}'];
 	if (tags.length === 0) return `${[...head, 'This note has no tags.'].join('\n')}\n`;
-	const rows = tags.map((t) => `\\#${latexEscape(t.tag)} & \\rdtagref{${t.id}} & ${t.line}\\\\`);
+	const rows = tags.map((t) => `\\rdtagtext{\\#${latexEscape(t.tag)}} & \\rdtagref{${t.id}} & ${t.line}\\\\`);
 	return `${[
 		...head,
 		'\\begin{longtable}{@{}lrr@{}}',

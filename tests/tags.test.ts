@@ -4,7 +4,7 @@ import { readDocMeta } from '../src/core/document';
 import type { ExportResolver } from '../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../src/core/render';
 import type { CitationEntry } from '../src/core/sources';
-import { markTags, stripTagMarkers, stripTags, tagTable } from '../src/core/tags';
+import { markTags, stripTagMarkers, stripTags, tagTable, unmarkRawSpans } from '../src/core/tags';
 
 describe('stripTags', () => {
 	it('removes a tag from anywhere in a line, closing up the space', () => {
@@ -108,26 +108,31 @@ describe('prepareDocument and buildFiles with the tag table', () => {
 		]);
 		expect(p.markdown).toBe('Keep #fix here.\nMore #todo.');
 		const off = buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'dev' });
-		expect(off.files['source.md']).toBe('Keep #fix here.\nMore #todo.\n');
+		expect(off.files['source.md']).toBe('Keep `\\rdtagtext{`{=latex}#fix`}`{=latex} here.\nMore `\\rdtagtext{`{=latex}#todo`}`{=latex}.\n');
 		expect(off.files['after.tex']).toBeUndefined();
-		expect(off.files['cite.tex']).not.toContain('rdtag');
+		expect(off.files['cite.tex']).toContain('\\definecolor{rdtagcolor}');
+		expect(off.files['cite.tex']).not.toContain('\\rdtagref');
 	});
 	it('Dev with tags: \\rdtag before each tag, macros in cite.tex, the table in after.tex', async () => {
 		const p = await prepareDocument(doc, 'P.md', '@', resolver, new Map());
 		const on = buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'dev', tags: true, lineNumbers: true });
-		expect(on.files['source.md']).toContain('`\\rdtag{2}`{=latex}#fix');
+		expect(on.files['source.md']).toContain('`\\rdtag{2}\\rdtagtext{`{=latex}#fix`}`{=latex}');
 		expect(on.files['source.md']).toContain('\\rdln{5}');
 		expect(on.files['cite.tex']).toContain('\\DeclareRobustCommand{\\rdtag}');
 		expect(on.job.after).toBe('after.tex');
-		expect(on.files['after.tex']).toContain('\\#fix & \\rdtagref{2} & 5\\\\');
-		expect(on.files['after.tex']).toContain('\\#todo & \\rdtagref{4} & 7\\\\');
+		expect(on.files['after.tex']).toContain('\\rdtagtext{\\#fix} & \\rdtagref{2} & 5\\\\');
+		expect(on.files['after.tex']).toContain('\\rdtagtext{\\#todo} & \\rdtagref{4} & 7\\\\');
 	});
 	it('Submit never lists tags, even when asked', async () => {
 		const p = await prepareDocument(doc, 'P.md', '@', resolver, new Map());
 		const sub = buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'submit', tags: true });
 		expect(sub.files['source.md']).toBe('Keep here.\nMore.\n');
 		expect(sub.files['after.tex']).toBeUndefined();
-		expect(sub.files['cite.tex']).not.toContain('rdtag');
+		expect(sub.files['cite.tex']).not.toContain('\\rdtagref');
+	});
+	it('placeholders inside a raw LaTeX span are dropped, so the span stays intact', () => {
+		const marked = markTags('#fix').doc;
+		expect(unmarkRawSpans(`\`\\rdunmatched{${marked}}\`{=latex} ${marked}`)).toBe(`\`\\rdunmatched{#fix}\`{=latex} ${marked}`);
 	});
 	it('a note with no tags gets a table page that says so', () => {
 		expect(tagTable([])).toContain('This note has no tags.');
