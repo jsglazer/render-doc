@@ -4,13 +4,14 @@
 
 export interface DocMeta {
 	title: string; // frontmatter title, else the note's basename
+	subtitle: string | null; // subtitle:, centred below the title on the Submit cover page
 	shortTitle: string; // titleshort:, else the title (the Submit header)
 	authors: string[]; // the note's author:, else the Default author setting
 	className: string | null; // class: (or course:)
 	classNum: string | null; // coursenum: (or classnum:), printed under the class
 	prof: string | null; // prof:
 	date: string | null; // date:, as written
-	// Whether the note has any title-block field at all (title, titleshort,
+	// Whether the note has any title-block field at all (title, subtitle, titleshort,
 	// author, class/course, coursenum/classnum, prof, date). Without one there
 	// is no cover page: the document renders straight from its first page
 	// (Update003). The header still falls back to the basename and default author.
@@ -18,7 +19,7 @@ export interface DocMeta {
 }
 
 // Scalar title-block keys; author: is checked separately (it may be a list).
-const TITLE_BLOCK_KEYS = ['title', 'titleshort', 'class', 'course', 'coursenum', 'classnum', 'prof', 'date'] as const;
+const TITLE_BLOCK_KEYS = ['title', 'subtitle', 'titleshort', 'class', 'course', 'coursenum', 'classnum', 'prof', 'date'] as const;
 
 function asText(value: unknown): string | null {
 	if (typeof value === 'string' && value.trim() !== '') return value.trim();
@@ -37,6 +38,7 @@ export function readDocMeta(frontmatter: Readonly<Record<string, unknown>> | und
 	const hasTitleBlock = noteAuthors.length > 0 || TITLE_BLOCK_KEYS.some((k) => asText(fm[k]) !== null);
 	return {
 		title,
+		subtitle: asText(fm.subtitle),
 		shortTitle: asText(fm.titleshort) ?? title,
 		authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
 		className: asText(fm.class) ?? asText(fm.course),

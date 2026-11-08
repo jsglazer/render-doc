@@ -197,7 +197,7 @@ function separateBlocks(markdown) {
 }
 
 // src/core/document.ts
-var TITLE_BLOCK_KEYS = ["title", "titleshort", "class", "course", "coursenum", "classnum", "prof", "date"];
+var TITLE_BLOCK_KEYS = ["title", "subtitle", "titleshort", "class", "course", "coursenum", "classnum", "prof", "date"];
 function asText(value) {
   if (typeof value === "string" && value.trim() !== "") return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -213,6 +213,7 @@ function readDocMeta(frontmatter, basename, defaultAuthor = "") {
   const hasTitleBlock = noteAuthors.length > 0 || TITLE_BLOCK_KEYS.some((k) => asText(fm[k]) !== null);
   return {
     title,
+    subtitle: asText(fm.subtitle),
     shortTitle: (_b = asText(fm.titleshort)) != null ? _b : title,
     authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
     className: (_c = asText(fm.class)) != null ? _c : asText(fm.course),
@@ -321,6 +322,7 @@ function metaHeader(meta) {
     "% Written by Render Doc \u2014 included BEFORE the preamble, so its",
     "% \\providecommand defaults leave these alone.",
     `\\def\\DocTitle{${t}}`,
+    def("DocSubtitle", meta.subtitle),
     def("DocShortTitle", meta.shortTitle),
     `\\def\\DocAuthor{${author}}`,
     def("DocClass", meta.className),
@@ -987,9 +989,10 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
 
 % Per-note values, set by Render Doc's meta.tex from the note's frontmatter
-% (title, titleshort, author, class, coursenum, prof, date). Empty when absent; the
+% (title, subtitle, titleshort, author, class, coursenum, prof, date). Empty when absent; the
 % header title falls back to \jobname, the short title to the title.
 \providecommand{\DocTitle}{}
+\providecommand{\DocSubtitle}{}
 \providecommand{\DocShortTitle}{}
 \providecommand{\DocAuthor}{}
 \providecommand{\DocClass}{}
@@ -1003,12 +1006,16 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
 var COVER_PAGE = String.raw`
 % Cover page (pandoc calls \maketitle at the start of the document).
 \newcommand{\CoverLine}[1]{\ifdefempty{#1}{}{#1\par\medskip}}
+% The subtitle: centred below the title at 70% of the title's (\LARGE) size.
+\makeatletter
+\newcommand{\SubtitleFont}{\LARGE\fontsize{\fpeval{.7*\f@size}}{\fpeval{.84*\f@size}}\selectfont}
+\makeatother
 \renewcommand{\maketitle}{%
   \pagenumbering{Alph}%
   \thispagestyle{empty}%
   \begin{center}
     \vspace*{\dimexpr .25\textheight - 1in\relax}
-    \parbox{.56\textwidth}{\centering\LARGE \HeaderTitle\par}\par
+    \parbox{.56\textwidth}{\centering{\LARGE \HeaderTitle\par}\ifdefempty{\DocSubtitle}{}{\medskip{\SubtitleFont \DocSubtitle\par}}}\par
     \vspace{.12\textheight}
     {\large \DocAuthor\par}
     \vfill
@@ -1063,7 +1070,7 @@ function preambleFingerprint(text2) {
   }
   return h.toString(16).padStart(8, "0");
 }
-var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a", "00249892", "7a81154c"]);
+var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a", "00249892", "7a81154c", "0af1a146", "e2c4d938"]);
 
 // src/core/settings.ts
 var FONT_SIZES = [8, 9, 10, 11, 12, 14, 17, 20];

@@ -116,7 +116,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		};
 		prepared = await prepareDocument(NOTE, 'Classes/Polarization/Paper.md', '@', resolver, discovery.index);
 		unmatchedCount = prepared.citations.unmatched.length;
-		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
+		const meta = readDocMeta({ title: 'Polarization & Money', subtitle: '(Theory & Hypotheses)', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
 		const { files, job } = buildFiles(
 			prepared,
 			meta,
@@ -239,7 +239,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		const parent2 = join(tmp, 'out-submit');
 		mkdirSync(join(build2, 'assets'), { recursive: true });
 		mkdirSync(parent2);
-		const meta = readDocMeta({ title: 'Polarization & Money', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
+		const meta = readDocMeta({ title: 'Polarization & Money', subtitle: '(Theory & Hypotheses)', titleshort: 'Polarization', class: 'POLS 501', coursenum: '(POLS-501-001)', prof: 'Dr. Rivera', date: '2026-10-28' }, 'Paper', 'Joshua S. Glazer');
 		const { files, job } = buildFiles(prepared, meta, { resourcePath: FIXTURES, parentDir: parent2, folderName: 'Paper', stem: 'Paper', overwrite: false }, { lineNumbers: true, mode: 'submit' });
 		for (const [name, content] of Object.entries(files)) writeFileSync(join(build2, name), content, 'utf8');
 		writeFileSync(join(build2, 'preamble.tex'), DEFAULT_SUBMIT_PREAMBLE, 'utf8');
@@ -251,7 +251,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 
 		const pages = pdfText(join(parent2, 'Paper', 'Paper.pdf')).split('\f').filter((p) => p.trim() !== '');
 		const cover = (pages[0] ?? '').replace(/\s+/g, ' ');
-		expect(cover).toContain('Polarization & Money');
+		expect(cover).toContain('Polarization & Money (Theory & Hypotheses) Joshua S. Glazer');
 		expect(cover).toContain('Joshua S. Glazer');
 		expect(cover).toMatch(/POLS 501 \(POLS-501-001\) Dr\. Rivera/);
 		expect(cover).toContain('Wednesday, October 28th, 2026');

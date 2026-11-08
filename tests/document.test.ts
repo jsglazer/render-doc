@@ -202,8 +202,11 @@ describe('latex', () => {
 		expect(citeHeader(true)).toContain('\\defbibheading{rdreferences}[\\refname]{\\section*{\\centering #1}');
 	});
 	it('sets the per-note macros escaped, the date formatted', () => {
-		const tex = metaHeader(readDocMeta({ title: 'A_B', titleshort: 'AB', class: 'POLS & Co', date: '2020-01-01' }, 'n', 'Me'));
+		const tex = metaHeader(readDocMeta({ title: 'A_B', subtitle: '(Theory & Hypotheses)', titleshort: 'AB', class: 'POLS & Co', date: '2020-01-01' }, 'n', 'Me'));
 		expect(tex).toContain('\\def\\DocTitle{A\\_B}');
+		expect(tex).toContain('\\def\\DocSubtitle{(Theory \\& Hypotheses)}');
+		expect(metaHeader(readDocMeta({ title: 'T' }, 'n'))).toContain('\\def\\DocSubtitle{}');
+		expect(readDocMeta({ subtitle: 'Only' }, 'n').hasTitleBlock).toBe(true);
 		expect(tex).toContain('\\def\\DocShortTitle{AB}');
 		expect(tex).toContain('\\def\\DocAuthor{Me}');
 		expect(tex).toContain('\\def\\DocClass{POLS \\& Co}');

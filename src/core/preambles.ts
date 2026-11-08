@@ -4,13 +4,13 @@
 //
 // Both began as Josh's LatexPre.tex. Render Doc's meta.tex (included BEFORE
 // the preamble, see src/core/latex.ts) defines the per-note macros they use:
-//   \DocTitle  \DocShortTitle  \DocAuthor  \DocClass  \DocClassNum  \DocProf  \DocDate
+//   \DocTitle  \DocSubtitle  \DocShortTitle  \DocAuthor  \DocClass  \DocClassNum  \DocProf  \DocDate
 // Each is \providecommand'ed here too, so the delivered .tex and a preamble
 // used on its own still compile.
 //
 // Submit redefines \maketitle as the cover page, modelled on an APA student
 // title page without its running head, "Full Title" line or due-date label:
-// title, author, then class, class number, professor and date at the foot,
+// title, subtitle (centred below it at 70% of the title's size), author, then class, class number, professor and date at the foot,
 // each line skipped when empty. The title wraps within the middle 56% of the
 // page. The cover has no header or footer and is not counted, so the first
 // page of text is page 1 of N. Dev has no title page at all: its \maketitle
@@ -37,9 +37,10 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
 
 % Per-note values, set by Render Doc's meta.tex from the note's frontmatter
-% (title, titleshort, author, class, coursenum, prof, date). Empty when absent; the
+% (title, subtitle, titleshort, author, class, coursenum, prof, date). Empty when absent; the
 % header title falls back to \jobname, the short title to the title.
 \providecommand{\DocTitle}{}
+\providecommand{\DocSubtitle}{}
 \providecommand{\DocShortTitle}{}
 \providecommand{\DocAuthor}{}
 \providecommand{\DocClass}{}
@@ -54,12 +55,16 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
 const COVER_PAGE = String.raw`
 % Cover page (pandoc calls \maketitle at the start of the document).
 \newcommand{\CoverLine}[1]{\ifdefempty{#1}{}{#1\par\medskip}}
+% The subtitle: centred below the title at 70% of the title's (\LARGE) size.
+\makeatletter
+\newcommand{\SubtitleFont}{\LARGE\fontsize{\fpeval{.7*\f@size}}{\fpeval{.84*\f@size}}\selectfont}
+\makeatother
 \renewcommand{\maketitle}{%
   \pagenumbering{Alph}%
   \thispagestyle{empty}%
   \begin{center}
     \vspace*{\dimexpr .25\textheight - 1in\relax}
-    \parbox{.56\textwidth}{\centering\LARGE \HeaderTitle\par}\par
+    \parbox{.56\textwidth}{\centering{\LARGE \HeaderTitle\par}\ifdefempty{\DocSubtitle}{}{\medskip{\SubtitleFont \DocSubtitle\par}}}\par
     \vspace{.12\textheight}
     {\large \DocAuthor\par}
     \vfill
@@ -122,7 +127,7 @@ export function preambleFingerprint(text: string): string {
 	return h.toString(16).padStart(8, '0');
 }
 
-// Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit, 1.0.5 Dev, 1.0.5 Submit, 1.0.13 Dev, 1.0.13 Submit). A saved preamble that
+// Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit, 1.0.5 Dev, 1.0.5 Submit, 1.0.13 Dev, 1.0.13 Submit, 1.0.19 Dev, 1.0.19 Submit). A saved preamble that
 // matches one was never edited, so it follows the current default instead.
 // Add the old fingerprints here whenever a default changes.
-export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40', 'f19a1df5', '2afbc73a', '00249892', '7a81154c']);
+export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40', 'f19a1df5', '2afbc73a', '00249892', '7a81154c', '0af1a146', 'e2c4d938']);
