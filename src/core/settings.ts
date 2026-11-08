@@ -17,6 +17,8 @@ export interface RenderDocSettings {
 	submitPreamble: string;
 	// The dialog's "Line numbers" toggle last time (Dev only; Submit never numbers).
 	lineNumbers: boolean;
+	// The dialog's "Include tags" toggle last time (Dev only; Submit never lists tags).
+	includeTags: boolean;
 	// The dialog's Dev/Submit choice last time.
 	mode: RenderMode;
 	// The dialog's "Open export folder" toggle last time; off until turned on.
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: RenderDocSettings = {
 	devPreamble: DEFAULT_DEV_PREAMBLE,
 	submitPreamble: DEFAULT_SUBMIT_PREAMBLE,
 	lineNumbers: false,
+	includeTags: false,
 	mode: 'dev',
 	openFolder: false,
 	fontSize: DEFAULT_FONT_SIZE,
@@ -83,6 +86,7 @@ export function mergeSettings(saved: unknown): RenderDocSettings {
 		devPreamble: preamble(s.devPreamble, DEFAULT_SETTINGS.devPreamble),
 		submitPreamble: preamble(s.submitPreamble, DEFAULT_SETTINGS.submitPreamble),
 		lineNumbers: typeof s.lineNumbers === 'boolean' ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
+		includeTags: typeof s.includeTags === 'boolean' ? s.includeTags : DEFAULT_SETTINGS.includeTags,
 		mode: s.mode === 'submit' ? 'submit' : 'dev',
 		openFolder: typeof s.openFolder === 'boolean' ? s.openFolder : DEFAULT_SETTINGS.openFolder,
 		fontSize: isFontSize(s.fontSize) ? s.fontSize : DEFAULT_SETTINGS.fontSize,
@@ -107,5 +111,10 @@ export function preambleFor(settings: RenderDocSettings, mode: RenderMode): stri
 
 // Line numbers are a Dev aid: the copy handed in never carries them (Josh, Update000).
 export function lineNumbersAllowed(mode: RenderMode): boolean {
+	return mode === 'dev';
+}
+
+// The tag table is a Dev aid too: the copy handed in never lists tags (Josh, Update007).
+export function tagTableAllowed(mode: RenderMode): boolean {
 	return mode === 'dev';
 }

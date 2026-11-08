@@ -49,6 +49,7 @@ export interface RenderPlan {
 	// warning. Only then may delivery write into an existing folder.
 	overwrite: boolean;
 	lineNumbers: boolean; // edited by the dialog
+	includeTags: boolean; // edited by the dialog: the tag table at the end (Dev only)
 	mode: RenderMode; // edited by the dialog: which preamble to use
 	openFolder: boolean; // edited by the dialog: reveal the PDF in Finder afterwards
 	// Edited by the dialog: \clearpage before level-one headings past the
@@ -63,6 +64,7 @@ export interface RenderPlan {
 export interface PlanOptions {
 	parentDir: string;
 	lineNumbers: boolean;
+	includeTags: boolean;
 	mode: RenderMode;
 	openFolder: boolean;
 	fontSize: FontSize;
@@ -134,6 +136,7 @@ export class RenderExporter {
 			stem,
 			overwrite: false,
 			lineNumbers: options.lineNumbers,
+			includeTags: options.includeTags,
 			mode: options.mode,
 			openFolder: options.openFolder,
 			pageBreaks: false,
@@ -201,7 +204,7 @@ export class RenderExporter {
 				stem: plan.stem,
 				overwrite: plan.overwrite,
 			},
-			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize },
+			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize, tags: plan.includeTags },
 		);
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');

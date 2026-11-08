@@ -401,6 +401,20 @@ var LINE_NUMBERS = [
 function pageBreakMacro(pageBreaks) {
   return `\\newcommand{\\rdpagebreak}{${pageBreaks ? "\\clearpage" : ""}}`;
 }
+var TAG_MACROS = [
+  "\\usepackage{longtable}",
+  "\\usepackage{booktabs}",
+  "\\makeatletter",
+  "\\newcommand{\\rdtagpage}[2]{\\expandafter\\gdef\\csname rd@tag@#1\\endcsname{#2}}",
+  "\\DeclareRobustCommand{\\rdtag}[1]{\\ifhmode\\hypertarget{rdtag-#1}{}\\fi\\protected@write\\@auxout{}{\\string\\rdtagpage{#1}{\\thepage}}}",
+  "\\newcommand{\\rdtagref}[1]{\\@ifundefined{rd@tag@#1}{??}{\\hyperlink{rdtag-#1}{\\csname rd@tag@#1\\endcsname}}}",
+  "\\let\\rd@tag@markright\\markright",
+  "\\renewcommand*{\\markright}[1]{{\\let\\rdtag\\@gobble\\rd@tag@markright{#1}}}",
+  "\\let\\rd@tag@markboth\\markboth",
+  "\\renewcommand*{\\markboth}[2]{{\\let\\rdtag\\@gobble\\rd@tag@markboth{#1}{#2}}}",
+  "\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdtag\\@gobble}\\fi",
+  "\\makeatother"
+];
 function citeHeader(withBibliography, options = {}) {
   var _a, _b;
   const lines = [
@@ -410,6 +424,7 @@ function citeHeader(withBibliography, options = {}) {
   ];
   if (withBibliography) lines.push(...BIBLATEX);
   if (options.lineNumbers === true) lines.push(...LINE_NUMBERS);
+  if (options.tags === true) lines.push(...TAG_MACROS);
   return `${lines.join("\n")}
 `;
 }
@@ -1058,6 +1073,7 @@ var DEFAULT_SETTINGS = {
   devPreamble: DEFAULT_DEV_PREAMBLE,
   submitPreamble: DEFAULT_SUBMIT_PREAMBLE,
   lineNumbers: false,
+  includeTags: false,
   mode: "dev",
   openFolder: false,
   fontSize: DEFAULT_FONT_SIZE
@@ -1084,6 +1100,7 @@ function mergeSettings(saved) {
     devPreamble: preamble(s.devPreamble, DEFAULT_SETTINGS.devPreamble),
     submitPreamble: preamble(s.submitPreamble, DEFAULT_SETTINGS.submitPreamble),
     lineNumbers: typeof s.lineNumbers === "boolean" ? s.lineNumbers : DEFAULT_SETTINGS.lineNumbers,
+    includeTags: typeof s.includeTags === "boolean" ? s.includeTags : DEFAULT_SETTINGS.includeTags,
     mode: s.mode === "submit" ? "submit" : "dev",
     openFolder: typeof s.openFolder === "boolean" ? s.openFolder : DEFAULT_SETTINGS.openFolder,
     fontSize: isFontSize(s.fontSize) ? s.fontSize : DEFAULT_SETTINGS.fontSize
@@ -1101,6 +1118,9 @@ function preambleFor(settings, mode) {
   return mode === "submit" ? settings.submitPreamble : settings.devPreamble;
 }
 function lineNumbersAllowed(mode) {
+  return mode === "dev";
+}
+function tagTableAllowed(mode) {
   return mode === "dev";
 }
 
@@ -1161,19 +1181,93 @@ function stripTags(markdown) {
   while (out.length > 0 && ((_b = out[out.length - 1]) != null ? _b : "").trim() === "") out.pop();
   return out.join("\n");
 }
+var OPEN2 = "\uE002";
+var CLOSE2 = "\uE003";
+var MARKER_RE2 = new RegExp(`${OPEN2}(\\d+)${CLOSE2}`, "g");
+var SCAN_RE = /(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|(?<![\\$])\$(?=\S)[^$]*?(?<=\S)\$(?!\d)|\[\[[^\]]*\]\]|\]\([^)]*\)|<[a-z]+:[^>\s]*>|[a-z][a-z0-9+.-]*:\/\/\S*|(^|[ \t]+)#([\p{L}\p{N}_/-]+)/giu;
+function frontmatterEnd(lines) {
+  var _a, _b;
+  if (((_a = lines[0]) != null ? _a : "").trimEnd() !== "---") return 0;
+  for (let i = 1; i < lines.length; i++) {
+    const t = ((_b = lines[i]) != null ? _b : "").trimEnd();
+    if (t === "---" || t === "...") return i + 1;
+  }
+  return 0;
+}
+function markTags(doc) {
+  const lines = doc.split("\n");
+  const start = frontmatterEnd(lines);
+  const tags = [];
+  let fence = null;
+  let math = false;
+  const out = lines.map((line, i) => {
+    if (i < start) return line;
+    const fenceAfter = nextFenceState(line, fence);
+    if (fence !== null || fenceAfter !== null) {
+      fence = fenceAfter;
+      return line;
+    }
+    if (line.trim().startsWith("$$")) {
+      if (line.trim() === "$$" || !line.trim().slice(2).includes("$$")) math = !math;
+      return line;
+    }
+    if (math || !line.includes("#") || INDENTED_CODE_RE2.test(line) && !LIST_ITEM_RE2.test(line)) return line;
+    return line.replace(SCAN_RE, (whole, ...groups) => {
+      const lead = groups[1];
+      const name = groups[2];
+      if (typeof name !== "string" || ALL_DIGITS_RE.test(name)) return whole;
+      const id = tags.length + 1;
+      tags.push({ id, tag: name, line: i + 1 });
+      return `${typeof lead === "string" ? lead : ""}${OPEN2}${id}${CLOSE2}#${name}`;
+    });
+  });
+  return { doc: out.join("\n"), tags };
+}
+function survivingTagIds(text2) {
+  return new Set([...text2.matchAll(MARKER_RE2)].map((m) => Number(m[1])));
+}
+function tagMarkersToLatex(text2) {
+  return text2.replace(MARKER_RE2, (_m, n) => rawLatex(`\\rdtag{${n}}`));
+}
+function stripTagMarkers(text2) {
+  return text2.replace(MARKER_RE2, "");
+}
+function tagTable(tags) {
+  const head = ["\\clearpage", "\\section*{\\centering Tags}\\markboth{Tags}{Tags}"];
+  if (tags.length === 0) return `${[...head, "This note has no tags."].join("\n")}
+`;
+  const rows = tags.map((t) => `\\#${latexEscape(t.tag)} & \\rdtagref{${t.id}} & ${t.line}\\\\`);
+  return `${[
+    ...head,
+    "\\begin{longtable}{@{}lrr@{}}",
+    "\\toprule",
+    "Tag & Page & Line\\\\",
+    "\\midrule",
+    "\\endhead",
+    ...rows,
+    "\\bottomrule",
+    "\\end{longtable}"
+  ].join("\n")}
+`;
+}
 
 // src/core/render.ts
 async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
-  const extraction = extractBody(markSourceLines(doc, sigilChar), sigilChar);
+  const marked = markTags(doc);
+  const extraction = extractBody(markSourceLines(marked.doc, sigilChar), sigilChar);
   const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
   const citations = replaceCitations(separateBlocks(converted.markdown), index);
-  const markdown = stripMarkers(citations.markdown);
+  const printed = survivingTagIds(citations.markdown);
+  const untagged = stripTagMarkers(citations.markdown);
+  const markdown = stripMarkers(untagged);
   const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
   const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
   return {
     markdown,
-    numberedMarkdown: markersToLatex(citations.markdown),
-    submit: { markdown: stripTags(stripMarkers(submitCitations.markdown)), citations: submitCitations, issues: submitConverted.issues },
+    numberedMarkdown: markersToLatex(untagged),
+    markedMarkdown: citations.markdown,
+    tags: marked.tags.filter((t) => printed.has(t.id)),
+    submit: { markdown: stripTags(stripTagMarkers(stripMarkers(submitCitations.markdown))), citations: submitCitations, issues: submitConverted.issues },
     citations,
     issues: converted.issues,
     outlineLinesStripped: extraction.outlineLinesStripped,
@@ -1186,25 +1280,33 @@ function versionOf(prepared, mode) {
 var PREAMBLE_FILE = "preamble.tex";
 var BIB_FILE = "refs.bib";
 function buildFiles(prepared, meta, target, options = {}) {
-  var _a, _b, _c;
-  const cites = versionOf(prepared, (_a = options.mode) != null ? _a : "dev").citations.citekeys.length > 0;
+  var _a, _b;
+  const mode = (_a = options.mode) != null ? _a : "dev";
+  const cites = versionOf(prepared, mode).citations.citekeys.length > 0;
   const fontSize = (_b = options.fontSize) != null ? _b : DEFAULT_FONT_SIZE;
-  const numbered = options.lineNumbers === true && lineNumbersAllowed((_c = options.mode) != null ? _c : "dev");
-  const body = numbered ? prepared.numberedMarkdown : options.mode === "submit" ? prepared.submit.markdown : prepared.markdown;
+  const numbered = options.lineNumbers === true && lineNumbersAllowed(mode);
+  const tagged = options.tags === true && tagTableAllowed(mode);
+  let body;
+  if (mode === "submit") body = prepared.submit.markdown;
+  else {
+    const lined = numbered ? markersToLatex(prepared.markedMarkdown) : stripMarkers(prepared.markedMarkdown);
+    body = tagged ? tagMarkersToLatex(lined) : stripTagMarkers(lined);
+  }
   const files = {
     "source.md": `${body}
 `,
     "meta.tex": metaHeader(meta),
-    "cite.tex": citeHeader(cites, { lineNumbers: numbered, pageBreaks: options.pageBreaks, hideUnmatched: options.hideUnmatched }),
+    "cite.tex": citeHeader(cites, { lineNumbers: numbered, pageBreaks: options.pageBreaks, hideUnmatched: options.hideUnmatched, tags: tagged }),
     "meta.json": `${JSON.stringify(pandocMetadata(meta), null, 2)}
 `
   };
-  if (cites) files["after.tex"] = BIBLIOGRAPHY_TRAILER;
+  const after = `${cites ? BIBLIOGRAPHY_TRAILER : ""}${tagged ? tagTable(prepared.tags) : ""}`;
+  if (after !== "") files["after.tex"] = after;
   const job = {
     version: 1,
     source: "source.md",
     headers: ["meta.tex", PREAMBLE_FILE, "cite.tex"],
-    after: cites ? "after.tex" : "",
+    after: after !== "" ? "after.tex" : "",
     metadataFile: "meta.json",
     bibliography: cites ? BIB_FILE : "",
     ...target,
@@ -1874,6 +1976,7 @@ var RenderExporter = class {
       stem,
       overwrite: false,
       lineNumbers: options.lineNumbers,
+      includeTags: options.includeTags,
       mode: options.mode,
       openFolder: options.openFolder,
       pageBreaks: false,
@@ -1934,7 +2037,7 @@ var RenderExporter = class {
         stem: plan.stem,
         overwrite: plan.overwrite
       },
-      { lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize }
+      { lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize, tags: plan.includeTags }
     );
     for (const [name, content] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(buildDir, name), content, "utf8");
@@ -1969,6 +2072,7 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.folderText = null;
     this.lineNumbersEl = null;
     this.summaryEl = null;
+    this.tagsEl = null;
   }
   onOpen() {
     const { contentEl, plan } = this;
@@ -2024,6 +2128,11 @@ var RenderModal = class extends import_obsidian2.Modal {
         plan.lineNumbers = v;
       })
     ).settingEl;
+    this.tagsEl = new import_obsidian2.Setting(contentEl).setName("Include tags").setDesc("End the PDF with a table of every #tag in the note: the tag, the page it prints on and its line number in the note (the same number the margin shows). Dev only.").addToggle(
+      (t) => t.setValue(plan.includeTags).onChange((v) => {
+        plan.includeTags = v;
+      })
+    ).settingEl;
     this.showMode();
     new import_obsidian2.Setting(contentEl).setName("Page break before # headings").setDesc(`Start each level-one heading (# Heading) on a new page, except one in the first ${PAGE_BREAK_SKIP_LINES} lines below the frontmatter.`).addToggle(
       (t) => t.setValue(plan.pageBreaks).onChange((v) => {
@@ -2058,10 +2167,11 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.contentEl.empty();
   }
   showMode() {
-    var _a;
+    var _a, _b;
     this.titleEl.toggleClass("is-dev", this.plan.mode === "dev");
     this.titleEl.toggleClass("is-submit", this.plan.mode === "submit");
     (_a = this.lineNumbersEl) == null ? void 0 : _a.toggle(lineNumbersAllowed(this.plan.mode));
+    (_b = this.tagsEl) == null ? void 0 : _b.toggle(tagTableAllowed(this.plan.mode));
   }
   refresh() {
     var _a;
@@ -2087,6 +2197,7 @@ var RenderModal = class extends import_obsidian2.Modal {
       text: `Citations resolved: ${citations.resolved.length} (${citations.citekeys.length} distinct work${citations.citekeys.length === 1 ? "" : "s"})`
     });
     list.createEl("li", { text: `Unmatched, left highlighted: ${citations.unmatched.length}` });
+    if (tagTableAllowed(this.plan.mode)) list.createEl("li", { text: `Tags found: ${prepared.tags.length}` });
     if (prepared.outlineLinesStripped > 0) {
       list.createEl("li", { text: `Outline lines stripped: ${prepared.outlineLinesStripped}` });
     }
@@ -2221,6 +2332,7 @@ var RenderDocPlugin = class extends import_obsidian4.Plugin {
     const plan = await this.exporter.plan(file, {
       parentDir,
       lineNumbers: this.settings.lineNumbers,
+      includeTags: this.settings.includeTags,
       mode: this.settings.mode,
       openFolder: this.settings.openFolder,
       fontSize: this.settings.fontSize,
@@ -2240,6 +2352,7 @@ var RenderDocPlugin = class extends import_obsidian4.Plugin {
     var _a;
     this.busy = true;
     this.settings.lineNumbers = plan.lineNumbers;
+    this.settings.includeTags = plan.includeTags;
     this.settings.mode = plan.mode;
     this.settings.openFolder = plan.openFolder;
     await this.saveSettings();

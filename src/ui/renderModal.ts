@@ -4,7 +4,9 @@
 // disables Render — and a summary: source notes found, citations resolved,
 // citations left highlighted, with every warning. A Dev/Submit selector and a
 // line-numbers toggle, both remembered between renders. The toggle is Dev
-// only: Submit never prints line numbers, so it is hidden there. A
+// only: Submit never prints line numbers, so it is hidden there. Below it an
+// "Include tags" toggle (the tag table at the end; Dev only and remembered,
+// the same way). A
 // page-break toggle and a hide-citation-alerts toggle (both modes) that
 // always open off. A font-size dropdown that opens on the settings default
 // and changes only this render (Update002).
@@ -19,7 +21,7 @@ import type { TargetCheck } from '../core/document';
 import { folderNameFor } from '../core/document';
 import { PAGE_BREAK_SKIP_LINES } from '../core/exportBody';
 import type { RenderMode } from '../core/settings';
-import { FONT_SIZES, isFontSize, lineNumbersAllowed } from '../core/settings';
+import { FONT_SIZES, isFontSize, lineNumbersAllowed, tagTableAllowed } from '../core/settings';
 import { versionOf } from '../core/render';
 import type { RenderPlan } from '../export/exporter';
 
@@ -36,6 +38,7 @@ export class RenderModal extends Modal {
 	private folderText: { setValue(value: string): unknown } | null = null;
 	private lineNumbersEl: HTMLElement | null = null;
 	private summaryEl: HTMLElement | null = null;
+	private tagsEl: HTMLElement | null = null;
 
 	constructor(
 		app: App,
@@ -122,6 +125,15 @@ export class RenderModal extends Modal {
 					plan.lineNumbers = v;
 				}),
 			).settingEl;
+
+		this.tagsEl = new Setting(contentEl)
+			.setName('Include tags')
+			.setDesc('End the PDF with a table of every #tag in the note: the tag, the page it prints on and its line number in the note (the same number the margin shows). Dev only.')
+			.addToggle((t) =>
+				t.setValue(plan.includeTags).onChange((v) => {
+					plan.includeTags = v;
+				}),
+			).settingEl;
 		this.showMode();
 
 		new Setting(contentEl)
@@ -180,6 +192,7 @@ export class RenderModal extends Modal {
 		this.titleEl.toggleClass('is-dev', this.plan.mode === 'dev');
 		this.titleEl.toggleClass('is-submit', this.plan.mode === 'submit');
 		this.lineNumbersEl?.toggle(lineNumbersAllowed(this.plan.mode));
+		this.tagsEl?.toggle(tagTableAllowed(this.plan.mode));
 	}
 
 	private refresh(): void {
@@ -206,6 +219,7 @@ export class RenderModal extends Modal {
 			text: `Citations resolved: ${citations.resolved.length} (${citations.citekeys.length} distinct work${citations.citekeys.length === 1 ? '' : 's'})`,
 		});
 		list.createEl('li', { text: `Unmatched, left highlighted: ${citations.unmatched.length}` });
+		if (tagTableAllowed(this.plan.mode)) list.createEl('li', { text: `Tags found: ${prepared.tags.length}` });
 		if (prepared.outlineLinesStripped > 0) {
 			list.createEl('li', { text: `Outline lines stripped: ${prepared.outlineLinesStripped}` });
 		}

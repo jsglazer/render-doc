@@ -70,6 +70,7 @@ export default class RenderDocPlugin extends Plugin {
 		const plan = await this.exporter.plan(file, {
 			parentDir,
 			lineNumbers: this.settings.lineNumbers,
+			includeTags: this.settings.includeTags,
 			mode: this.settings.mode,
 			openFolder: this.settings.openFolder,
 			fontSize: this.settings.fontSize,
@@ -89,6 +90,7 @@ export default class RenderDocPlugin extends Plugin {
 	private async render(plan: RenderPlan): Promise<void> {
 		this.busy = true;
 		this.settings.lineNumbers = plan.lineNumbers;
+		this.settings.includeTags = plan.includeTags;
 		this.settings.mode = plan.mode;
 		this.settings.openFolder = plan.openFolder;
 		await this.saveSettings();

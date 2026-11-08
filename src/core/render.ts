@@ -14,13 +14,18 @@ import { markersToLatex, markSourceLines, stripMarkers } from './lineMarkers';
 import type { ConversionIssue, ExportResolver } from './obsidianMarkdown';
 import { toPandocMarkdown } from './obsidianMarkdown';
 import type { FontSize, RenderMode } from './settings';
-import { DEFAULT_FONT_SIZE, documentClassFor, lineNumbersAllowed } from './settings';
+import { DEFAULT_FONT_SIZE, documentClassFor, lineNumbersAllowed, tagTableAllowed } from './settings';
 import type { CiteIndex } from './sources';
-import { stripTags } from './tags';
+import type { TagOccurrence } from './tags';
+import { markTags, stripTags, stripTagMarkers, survivingTagIds, tagMarkersToLatex, tagTable } from './tags';
 
 export interface PreparedDocument {
 	markdown: string; // pandoc Markdown with raw \autocite / \rdunmatched spans
 	numberedMarkdown: string; // the same, plus raw \rdln{<Obsidian line>} spans
+	// The Dev copy with every line and tag placeholder still in place; buildFiles
+	// decides what each becomes (src/core/lineMarkers.ts, src/core/tags.ts).
+	markedMarkdown: string;
+	tags: TagOccurrence[]; // the tags the Dev copy prints, in document order
 	// The Submit copy: no Excalidraw drawings and no #tags (src/core/tags.ts). A
 	// drawing's text can hold citations and failed embeds, so it keeps its own.
 	submit: { markdown: string; citations: CitationResult; issues: ConversionIssue[] };
@@ -40,17 +45,24 @@ export async function prepareDocument(
 	// Mark each source line with its Obsidian line number, extract the prose,
 	// convert Obsidian syntax, add the blank lines pandoc needs before
 	// headings/quotes/tables/fences, then resolve citations. The markers ride
-	// along, then become \rdln or vanish (src/core/lineMarkers.ts).
-	const extraction = extractBody(markSourceLines(doc, sigilChar), sigilChar);
+	// along, then become \rdln or vanish (src/core/lineMarkers.ts). Tag
+	// placeholders go in first, on the untouched note, so each records its
+	// Obsidian line; they become \rdtag or vanish (src/core/tags.ts).
+	const marked = markTags(doc);
+	const extraction = extractBody(markSourceLines(marked.doc, sigilChar), sigilChar);
 	const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
 	const citations = replaceCitations(separateBlocks(converted.markdown), index);
-	const markdown = stripMarkers(citations.markdown);
+	const printed = survivingTagIds(citations.markdown);
+	const untagged = stripTagMarkers(citations.markdown);
+	const markdown = stripMarkers(untagged);
 	const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
 	const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
 	return {
 		markdown,
-		numberedMarkdown: markersToLatex(citations.markdown),
-		submit: { markdown: stripTags(stripMarkers(submitCitations.markdown)), citations: submitCitations, issues: submitConverted.issues },
+		numberedMarkdown: markersToLatex(untagged),
+		markedMarkdown: citations.markdown,
+		tags: marked.tags.filter((t) => printed.has(t.id)),
+		submit: { markdown: stripTags(stripTagMarkers(stripMarkers(submitCitations.markdown))), citations: submitCitations, issues: submitConverted.issues },
 		citations,
 		issues: converted.issues,
 		outlineLinesStripped: extraction.outlineLinesStripped,
@@ -95,24 +107,33 @@ export function buildFiles(
 	prepared: PreparedDocument,
 	meta: DocMeta,
 	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
-	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean; hideUnmatched?: boolean; fontSize?: FontSize } = {},
+	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean; hideUnmatched?: boolean; fontSize?: FontSize; tags?: boolean } = {},
 ): BuildFiles {
-	const cites = versionOf(prepared, options.mode ?? 'dev').citations.citekeys.length > 0;
+	const mode = options.mode ?? 'dev';
+	const cites = versionOf(prepared, mode).citations.citekeys.length > 0;
 	const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
-	const numbered = options.lineNumbers === true && lineNumbersAllowed(options.mode ?? 'dev');
-	const body = numbered ? prepared.numberedMarkdown : options.mode === 'submit' ? prepared.submit.markdown : prepared.markdown;
+	const numbered = options.lineNumbers === true && lineNumbersAllowed(mode);
+	const tagged = options.tags === true && tagTableAllowed(mode);
+	let body: string;
+	if (mode === 'submit') body = prepared.submit.markdown;
+	else {
+		const lined = numbered ? markersToLatex(prepared.markedMarkdown) : stripMarkers(prepared.markedMarkdown);
+		body = tagged ? tagMarkersToLatex(lined) : stripTagMarkers(lined);
+	}
 	const files: Record<string, string> = {
 		'source.md': `${body}\n`,
 		'meta.tex': metaHeader(meta),
-		'cite.tex': citeHeader(cites, { lineNumbers: numbered, pageBreaks: options.pageBreaks, hideUnmatched: options.hideUnmatched }),
+		'cite.tex': citeHeader(cites, { lineNumbers: numbered, pageBreaks: options.pageBreaks, hideUnmatched: options.hideUnmatched, tags: tagged }),
 		'meta.json': `${JSON.stringify(pandocMetadata(meta), null, 2)}\n`,
 	};
-	if (cites) files['after.tex'] = BIBLIOGRAPHY_TRAILER;
+	// After the text: the References (only when the note cites), then the tag table.
+	const after = `${cites ? BIBLIOGRAPHY_TRAILER : ''}${tagged ? tagTable(prepared.tags) : ''}`;
+	if (after !== '') files['after.tex'] = after;
 	const job: RenderJob = {
 		version: 1,
 		source: 'source.md',
 		headers: ['meta.tex', PREAMBLE_FILE, 'cite.tex'],
-		after: cites ? 'after.tex' : '',
+		after: after !== '' ? 'after.tex' : '',
 		metadataFile: 'meta.json',
 		bibliography: cites ? BIB_FILE : '',
 		...target,

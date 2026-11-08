@@ -460,3 +460,52 @@ describe.skipIf(!ready)('tags (real toolchain)', () => {
 		for (const tag of TAGS) expect(text).toContain(tag);
 	}, 300_000);
 });
+
+// Update007: "Include tags" ends a Dev PDF with a table of every tag: the tag,
+// the page it prints on and its Obsidian line number, after the References.
+describe.skipIf(!ready)('tag table (real toolchain)', () => {
+	let tmp = '';
+	const NOTE_TAG_TABLE = ['---', 'title: Tag Table', '---', 'First page text #alpha here.', '', '# Second Section', ...Array.from({ length: 16 }, (_, i) => `Filler ${i + 1}.`), '# Later #beta', 'Closing line with #gamma and a cite (Bonica, 2018).'].join('\n');
+	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
+
+	beforeAll(() => {
+		tmp = mkdtempSync(join(tmpdir(), 'render-doc-tagtable-'));
+		process.env.RENDER_DOC_CACHE = join(tmp, 'cache');
+	});
+	afterAll(() => {
+		delete process.env.RENDER_DOC_CACHE;
+		if (tmp !== '' && !process.env.RD_KEEP) rmSync(tmp, { recursive: true, force: true });
+	});
+
+	it('lists each tag with its page and Obsidian line, on the last page after the References', async () => {
+		const buildDir = join(tmp, 'build');
+		const parentDir = join(tmp, 'out');
+		mkdirSync(join(buildDir, 'assets'), { recursive: true });
+		mkdirSync(parentDir);
+		const index = new Map([['Bonica, 2018', [{ citekey: 'Bonica-InferringRollCallScores-2018', path: 'S/b.md' }]]]);
+		const prepared = await prepareDocument(NOTE_TAG_TABLE, 'TagTable.md', '@', resolver, index);
+		const { files, job } = buildFiles(
+			prepared,
+			readDocMeta({ title: 'Tag Table' }, 'TagTable'),
+			{ resourcePath: FIXTURES, parentDir, folderName: 'TagTable', stem: 'TagTable', overwrite: false },
+			{ mode: 'dev', pageBreaks: true, lineNumbers: true, tags: true },
+		);
+		for (const [file, content] of Object.entries(files)) writeFileSync(join(buildDir, file), content, 'utf8');
+		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_DEV_PREAMBLE, 'utf8');
+		copyFileSync(join(FIXTURES, 'refs.bib'), join(buildDir, 'refs.bib'));
+		writeFileSync(join(buildDir, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
+		const status = await runRenderer(RENDERER, join(buildDir, 'job.json'), buildDir);
+		expect(status, JSON.stringify(status)).toMatchObject({ ok: true });
+		const pages = pdfText(join(parentDir, 'TagTable', 'TagTable.pdf')).split('\f').filter((p) => p.trim() !== '');
+		const last = (pages[pages.length - 1] ?? '').replace(/[ \t]+/g, ' ');
+		expect(pages[pages.length - 2]).toContain('References');
+		expect(last).toContain('Tags');
+		expect(last).toMatch(/Tag Page Line/);
+		expect(last).toMatch(/#alpha 1 4\b/);
+		expect(last).toMatch(/#beta 2 23\b/);
+		expect(last).toMatch(/#gamma 2 24\b/);
+		expect(last).not.toContain('??');
+		// The tags still print in the text.
+		expect(pages.slice(0, -1).join(' ')).toContain('#alpha');
+	}, 300_000);
+});

@@ -9,8 +9,10 @@
 //   -H cite.tex       \rdunmatched always (highlight, or plain text when the
 //                     dialog hides citation alerts); biblatex only when the note cites;
 //                     \rdln (Obsidian line numbers) only when the dialog asked;
-//                     \rdpagebreak always, \clearpage only when the dialog asked
-//   -A after.tex      References on a page of its own, only when the note cites
+//                     \rdpagebreak always, \clearpage only when the dialog asked;
+//                     \rdtag/\rdtagref (the tag table) only when the dialog asked
+//   -A after.tex      References on a page of its own, only when the note cites;
+//                     then the tag table, only when the dialog asked
 //
 // No pandoc --biblatex or --citeproc: the body already carries raw \autocite
 // commands (Developer Decision "biblatex loading").
@@ -166,8 +168,29 @@ export function pageBreakMacro(pageBreaks: boolean): string {
 	return `\\newcommand{\\rdpagebreak}{${pageBreaks ? '\\clearpage' : ''}}`;
 }
 
+// The tag table (Update007; see src/core/tags.ts). \rdtag{<id>} sits in front
+// of each printed tag and writes the page it ships out on to the .aux file;
+// \rdtagref{<id>} prints that page, linked back to the tag (?? until latexmk's
+// second pass). Like \rdln, \rdtag vanishes from running heads and PDF
+// bookmarks when it sits in a heading.
+const TAG_MACROS = [
+	'\\usepackage{longtable}',
+	'\\usepackage{booktabs}',
+	'\\makeatletter',
+	'\\newcommand{\\rdtagpage}[2]{\\expandafter\\gdef\\csname rd@tag@#1\\endcsname{#2}}',
+	'\\DeclareRobustCommand{\\rdtag}[1]{\\ifhmode\\hypertarget{rdtag-#1}{}\\fi\\protected@write\\@auxout{}{\\string\\rdtagpage{#1}{\\thepage}}}',
+	'\\newcommand{\\rdtagref}[1]{\\@ifundefined{rd@tag@#1}{??}{\\hyperlink{rdtag-#1}{\\csname rd@tag@#1\\endcsname}}}',
+	'\\let\\rd@tag@markright\\markright',
+	'\\renewcommand*{\\markright}[1]{{\\let\\rdtag\\@gobble\\rd@tag@markright{#1}}}',
+	'\\let\\rd@tag@markboth\\markboth',
+	'\\renewcommand*{\\markboth}[2]{{\\let\\rdtag\\@gobble\\rd@tag@markboth{#1}{#2}}}',
+	'\\ifdefined\\pdfstringdefDisableCommands\\pdfstringdefDisableCommands{\\let\\rdtag\\@gobble}\\fi',
+	'\\makeatother',
+];
+
 export interface CiteHeaderOptions {
 	lineNumbers?: boolean;
+	tags?: boolean;
 	pageBreaks?: boolean;
 	hideUnmatched?: boolean;
 }
@@ -180,6 +203,7 @@ export function citeHeader(withBibliography: boolean, options: CiteHeaderOptions
 	];
 	if (withBibliography) lines.push(...BIBLATEX);
 	if (options.lineNumbers === true) lines.push(...LINE_NUMBERS);
+	if (options.tags === true) lines.push(...TAG_MACROS);
 	return `${lines.join('\n')}\n`;
 }
 

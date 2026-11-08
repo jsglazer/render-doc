@@ -4,7 +4,7 @@ import { readDocMeta } from '../src/core/document';
 import type { ExportResolver } from '../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument } from '../src/core/render';
 import type { CitationEntry } from '../src/core/sources';
-import { stripTags } from '../src/core/tags';
+import { markTags, stripTagMarkers, stripTags, tagTable } from '../src/core/tags';
 
 describe('stripTags', () => {
 	it('removes a tag from anywhere in a line, closing up the space', () => {
@@ -73,5 +73,63 @@ describe('Submit renders drop tags', () => {
 		for (const tag of ['#fix', '#todo', '#inembed']) expect(dev).toContain(tag);
 		expect(buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'dev', lineNumbers: true }).files['source.md']).toContain('#fix');
 		expect(buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'submit', lineNumbers: true }).files['source.md']).toBe(submit);
+	});
+});
+
+// Update007: the "Include tags" table (Dev only).
+describe('markTags', () => {
+	it('records each tag with its Obsidian line, leaving the text as written', () => {
+		const doc = ['---', 'tags: [#nope]', '---', '# Head #headtag', 'Text #one and #two/sub.', '- item #three'].join('\n');
+		const { doc: marked, tags } = markTags(doc);
+		expect(tags).toEqual([
+			{ id: 1, tag: 'headtag', line: 4 },
+			{ id: 2, tag: 'one', line: 5 },
+			{ id: 3, tag: 'two/sub', line: 5 },
+			{ id: 4, tag: 'three', line: 6 },
+		]);
+		expect(stripTagMarkers(marked)).toBe(doc);
+	});
+	it('skips headings, numbers, code, math, links, URLs and the frontmatter', () => {
+		const doc = ['---', 'x: "#front"', '---', '## Heading', 'Issue #123, C#, x#y, `#code`, $#m$, [[Note#Heading]], [a](b.md#frag), https://a.b/#frag', '```', '#fenced', '```', '$$', '#math', '$$', '    #indented'].join('\n');
+		expect(markTags(doc).tags).toEqual([]);
+	});
+});
+
+describe('prepareDocument and buildFiles with the tag table', () => {
+	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
+	const target = { resourcePath: '/v', parentDir: '/out', folderName: 'P', stem: 'P', overwrite: false };
+	const doc = ['---', 'title: T', '---', '@ Outline #dropped', 'Keep #fix here.', '%% #comment %%', 'More #todo.'].join('\n');
+
+	it('lists only the tags that print, and leaves the body unchanged when off', async () => {
+		const p = await prepareDocument(doc, 'P.md', '@', resolver, new Map());
+		expect(p.tags).toEqual([
+			{ id: 2, tag: 'fix', line: 5 },
+			{ id: 4, tag: 'todo', line: 7 },
+		]);
+		expect(p.markdown).toBe('Keep #fix here.\nMore #todo.');
+		const off = buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'dev' });
+		expect(off.files['source.md']).toBe('Keep #fix here.\nMore #todo.\n');
+		expect(off.files['after.tex']).toBeUndefined();
+		expect(off.files['cite.tex']).not.toContain('rdtag');
+	});
+	it('Dev with tags: \\rdtag before each tag, macros in cite.tex, the table in after.tex', async () => {
+		const p = await prepareDocument(doc, 'P.md', '@', resolver, new Map());
+		const on = buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'dev', tags: true, lineNumbers: true });
+		expect(on.files['source.md']).toContain('`\\rdtag{2}`{=latex}#fix');
+		expect(on.files['source.md']).toContain('\\rdln{5}');
+		expect(on.files['cite.tex']).toContain('\\DeclareRobustCommand{\\rdtag}');
+		expect(on.job.after).toBe('after.tex');
+		expect(on.files['after.tex']).toContain('\\#fix & \\rdtagref{2} & 5\\\\');
+		expect(on.files['after.tex']).toContain('\\#todo & \\rdtagref{4} & 7\\\\');
+	});
+	it('Submit never lists tags, even when asked', async () => {
+		const p = await prepareDocument(doc, 'P.md', '@', resolver, new Map());
+		const sub = buildFiles(p, readDocMeta({}, 'P'), target, { mode: 'submit', tags: true });
+		expect(sub.files['source.md']).toBe('Keep here.\nMore.\n');
+		expect(sub.files['after.tex']).toBeUndefined();
+		expect(sub.files['cite.tex']).not.toContain('rdtag');
+	});
+	it('a note with no tags gets a table page that says so', () => {
+		expect(tagTable([])).toContain('This note has no tags.');
 	});
 });
