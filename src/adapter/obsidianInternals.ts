@@ -7,6 +7,7 @@
 // | Obsidian `app.plugins.plugins[id]`        | 1.14.4 (minAppVersion 1.7.2) | installed obsidian-1.14.4.asar: `this.plugins={}`, `getPlugin(e)` reads it, 2026-10-21 |
 // | Electron `dialog` / `shell`               | 39.8.3                      | Electron Framework CFBundleVersion, 2026-10-21                  |
 // | zotero-manager public `api`               | API version 1 (plugin 1.1.15) | jsglazer/zotero-manager origin src/api.ts (getBibLaTeX, getAllCiteKeys), 2026-10-21 |
+// | Excalidraw `ea.getAPI().createPNG`        | obsidian-excalidraw-plugin 2.29.2 | live export of a VaultSchar drawing via the Obsidian CLI, 1828×614 PNG Blob, 2026-11-08 |
 //
 // The build prompt's generic note about file-explorer internals (fileItems,
 // setCollapsed) does not apply: this plugin's audit specified no explorer
@@ -23,7 +24,39 @@ export const TARGETED_ELECTRON_VERSION = '39.8.3';
 
 // `App.plugins` is not in obsidian.d.ts. This is the only place its shape is asserted.
 interface PluginRegistry {
-	plugins?: Record<string, { api?: unknown } | undefined>;
+	plugins?: Record<string, { api?: unknown; ea?: unknown } | undefined>;
+}
+
+/* ------------------------------------------------------------------ Excalidraw -- */
+
+// The slice of ExcalidrawAutomate Render Doc uses: createPNG(templatePath,
+// scale, exportSettings, loader, theme, padding) → PNG Blob.
+interface ExcalidrawAutomateLike {
+	getAPI?(): ExcalidrawAutomateLike;
+	createPNG(templatePath: string, scale?: number, exportSettings?: { withBackground: boolean; withTheme: boolean }, loader?: undefined, theme?: string, padding?: number): Promise<Blob>;
+}
+
+function excalidrawAutomate(app: App): ExcalidrawAutomateLike | null {
+	const registry = (app as App & { plugins?: PluginRegistry }).plugins;
+	const ea = registry?.plugins?.['obsidian-excalidraw-plugin']?.ea as Partial<ExcalidrawAutomateLike> | undefined;
+	if (!ea || typeof ea.createPNG !== 'function') return null;
+	const fresh = typeof ea.getAPI === 'function' ? ea.getAPI() : (ea as ExcalidrawAutomateLike);
+	return typeof fresh.createPNG === 'function' ? fresh : null;
+}
+
+// Whether the Excalidraw plugin is enabled and can export drawings.
+export function excalidrawAvailable(app: App): boolean {
+	return excalidrawAutomate(app) !== null;
+}
+
+// A drawing as a PNG for print: 2× scale, light theme on a white background,
+// 10 px padding. Throws when Excalidraw is unavailable or the export fails.
+export async function exportDrawingPng(app: App, drawingPath: string): Promise<ArrayBuffer> {
+	const ea = excalidrawAutomate(app);
+	if (ea === null) throw new Error('the Excalidraw plugin is not enabled');
+	const blob = await ea.createPNG(drawingPath, 2, { withBackground: true, withTheme: false }, undefined, 'light', 10);
+	if (!(blob instanceof Blob) || blob.size === 0) throw new Error(`Excalidraw returned no image for ${drawingPath}`);
+	return blob.arrayBuffer();
 }
 
 // Zotero Manager's API object when the plugin is enabled and exposes the

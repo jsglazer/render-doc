@@ -11,7 +11,7 @@ import { pandocMetadata } from './document';
 import { extractBody } from './exportBody';
 import { BIBLIOGRAPHY_TRAILER, citeHeader, metaHeader } from './latex';
 import { markersToLatex, markSourceLines, stripMarkers } from './lineMarkers';
-import type { ConversionIssue, ExportResolver } from './obsidianMarkdown';
+import type { ConversionIssue, DrawingMode, ExportResolver } from './obsidianMarkdown';
 import { toPandocMarkdown } from './obsidianMarkdown';
 import type { FontSize, RenderMode } from './settings';
 import { DEFAULT_FONT_SIZE, documentClassFor, lineNumbersAllowed, tagTableAllowed } from './settings';
@@ -19,18 +19,25 @@ import type { CiteIndex } from './sources';
 import type { TagOccurrence } from './tags';
 import { markTags, stripTags, stripTagMarkers, survivingTagIds, tagMarkersToLatex, tagTable, unmarkRawSpans } from './tags';
 
-export interface PreparedDocument {
-	markdown: string; // pandoc Markdown with raw \autocite / \rdunmatched spans
+// One version of the note's text. There are two, because a drawing's note text
+// can hold citations and failed embeds of its own: with drawings as pictures
+// (the dialog's "Include drawings", on by default) and with drawings left out.
+// Dev and Submit share a version; Submit then drops the #tags (src/core/tags.ts).
+export interface PreparedVersion {
+	markdown: string; // Dev: pandoc Markdown with raw \autocite / \rdunmatched spans
 	numberedMarkdown: string; // the same, plus raw \rdln{<Obsidian line>} spans
 	// The Dev copy with every line and tag placeholder still in place; buildFiles
 	// decides what each becomes (src/core/lineMarkers.ts, src/core/tags.ts).
 	markedMarkdown: string;
 	tags: TagOccurrence[]; // the tags the Dev copy prints, in document order
-	// The Submit copy: no Excalidraw drawings and no #tags (src/core/tags.ts). A
-	// drawing's text can hold citations and failed embeds, so it keeps its own.
-	submit: { markdown: string; citations: CitationResult; issues: ConversionIssue[] };
+	submit: { markdown: string }; // the Submit copy: no #tags, no markers
 	citations: CitationResult;
 	issues: ConversionIssue[];
+}
+
+// The top-level fields are the version with drawings as pictures.
+export interface PreparedDocument extends PreparedVersion {
+	noDrawings: PreparedVersion;
 	outlineLinesStripped: number;
 	isEmpty: boolean;
 }
@@ -50,30 +57,34 @@ export async function prepareDocument(
 	// Obsidian line; they become \rdtag or vanish (src/core/tags.ts).
 	const marked = markTags(doc);
 	const extraction = extractBody(markSourceLines(marked.doc, sigilChar), sigilChar);
-	const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
-	const citations = replaceCitations(separateBlocks(converted.markdown), index);
-	const tagMarked = unmarkRawSpans(citations.markdown);
-	const printed = survivingTagIds(tagMarked);
-	const untagged = stripTagMarkers(tagMarked);
-	const markdown = stripMarkers(untagged);
-	const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
-	const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
+	const version = async (drawings: DrawingMode): Promise<PreparedVersion> => {
+		const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { drawings });
+		const citations = replaceCitations(separateBlocks(converted.markdown), index);
+		const tagMarked = unmarkRawSpans(citations.markdown);
+		const printed = survivingTagIds(tagMarked);
+		const untagged = stripTagMarkers(tagMarked);
+		return {
+			markdown: stripMarkers(untagged),
+			numberedMarkdown: markersToLatex(untagged),
+			markedMarkdown: tagMarked,
+			tags: marked.tags.filter((t) => printed.has(t.id)),
+			submit: { markdown: stripTags(stripMarkers(untagged)) },
+			citations,
+			issues: converted.issues,
+		};
+	};
+	const withDrawings = await version('image');
 	return {
-		markdown,
-		numberedMarkdown: markersToLatex(untagged),
-		markedMarkdown: tagMarked,
-		tags: marked.tags.filter((t) => printed.has(t.id)),
-		submit: { markdown: stripTags(stripTagMarkers(stripMarkers(submitCitations.markdown))), citations: submitCitations, issues: submitConverted.issues },
-		citations,
-		issues: converted.issues,
+		...withDrawings,
+		noDrawings: await version('skip'),
 		outlineLinesStripped: extraction.outlineLinesStripped,
 		isEmpty: extraction.isEmpty,
 	};
 }
 
-// The citations and embed problems of the copy being rendered.
-export function versionOf(prepared: PreparedDocument, mode: RenderMode): { citations: CitationResult; issues: ConversionIssue[] } {
-	return mode === 'submit' ? prepared.submit : prepared;
+// The version being rendered: drawings as pictures, or left out.
+export function versionOf(prepared: PreparedDocument, drawings: boolean): PreparedVersion {
+	return drawings ? prepared : prepared.noDrawings;
 }
 
 // renderer/render-pdf.sh reads this (see renderer/job.py for every field).
@@ -108,17 +119,18 @@ export function buildFiles(
 	prepared: PreparedDocument,
 	meta: DocMeta,
 	target: { resourcePath: string; parentDir: string; folderName: string; stem: string; overwrite: boolean },
-	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean; hideUnmatched?: boolean; fontSize?: FontSize; tags?: boolean } = {},
+	options: { lineNumbers?: boolean; mode?: RenderMode; pageBreaks?: boolean; hideUnmatched?: boolean; fontSize?: FontSize; tags?: boolean; drawings?: boolean } = {},
 ): BuildFiles {
 	const mode = options.mode ?? 'dev';
-	const cites = versionOf(prepared, mode).citations.citekeys.length > 0;
+	const version = versionOf(prepared, options.drawings ?? true);
+	const cites = version.citations.citekeys.length > 0;
 	const fontSize = options.fontSize ?? DEFAULT_FONT_SIZE;
 	const numbered = options.lineNumbers === true && lineNumbersAllowed(mode);
 	const tagged = options.tags === true && tagTableAllowed(mode);
 	let body: string;
-	if (mode === 'submit') body = prepared.submit.markdown;
+	if (mode === 'submit') body = version.submit.markdown;
 	else {
-		const lined = numbered ? markersToLatex(prepared.markedMarkdown) : stripMarkers(prepared.markedMarkdown);
+		const lined = numbered ? markersToLatex(version.markedMarkdown) : stripMarkers(version.markedMarkdown);
 		body = tagMarkersToLatex(lined, tagged);
 	}
 	const files: Record<string, string> = {
@@ -128,7 +140,7 @@ export function buildFiles(
 		'meta.json': `${JSON.stringify(pandocMetadata(meta), null, 2)}\n`,
 	};
 	// After the text: the References (only when the note cites), then the tag table.
-	const after = `${cites ? BIBLIOGRAPHY_TRAILER : ''}${tagged ? tagTable(prepared.tags) : ''}`;
+	const after = `${cites ? BIBLIOGRAPHY_TRAILER : ''}${tagged ? tagTable(version.tags) : ''}`;
 	if (after !== '') files['after.tex'] = after;
 	const job: RenderJob = {
 		version: 1,

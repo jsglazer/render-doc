@@ -509,3 +509,47 @@ describe.skipIf(!ready)('tag table (real toolchain)', () => {
 		expect(pages.slice(0, -1).join(' ')).toContain('#alpha');
 	}, 300_000);
 });
+
+// After Update007: "Include drawings" prints an Excalidraw drawing as a picture
+// (the shell exports it to PNG; fig.png stands in here), in Submit as in Dev.
+describe.skipIf(!ready)('drawings as pictures (real toolchain)', () => {
+	let tmp = '';
+	const drawingNote = ['---', 'excalidraw-plugin: parsed', '---', '==Switch to EXCALIDRAW VIEW==', '# Excalidraw Data'].join('\n');
+	const resolver: ExportResolver = {
+		resolveLink: (link) => (link === 'D.excalidraw' ? { path: 'D.excalidraw.md', kind: 'markdown' } : null),
+		readNote: () => Promise.resolve(drawingNote),
+		stageImage: () => '',
+		stageDrawing: () => 'assets/drawing-1-D.png',
+	};
+
+	beforeAll(() => {
+		tmp = mkdtempSync(join(tmpdir(), 'render-doc-drawings-'));
+		process.env.RENDER_DOC_CACHE = join(tmp, 'cache');
+	});
+	afterAll(() => {
+		delete process.env.RENDER_DOC_CACHE;
+		if (tmp !== '' && !process.env.RD_KEEP) rmSync(tmp, { recursive: true, force: true });
+	});
+
+	it('Submit prints the drawing as an image at the line width and none of its note text', async () => {
+		const buildDir = join(tmp, 'build');
+		const parentDir = join(tmp, 'out');
+		mkdirSync(join(buildDir, 'assets'), { recursive: true });
+		mkdirSync(parentDir);
+		const prepared = await prepareDocument('Before the drawing.\n\n![[D.excalidraw|100%]]\n\nAfter the drawing.', 'Draw.md', '@', resolver, new Map());
+		const { files, job } = buildFiles(prepared, readDocMeta({}, 'Draw'), { resourcePath: FIXTURES, parentDir, folderName: 'Draw', stem: 'Draw', overwrite: false }, { mode: 'submit' });
+		for (const [file, content] of Object.entries(files)) writeFileSync(join(buildDir, file), content, 'utf8');
+		copyFileSync(join(FIXTURES, 'fig.png'), join(buildDir, 'assets', 'drawing-1-D.png'));
+		writeFileSync(join(buildDir, 'preamble.tex'), DEFAULT_SUBMIT_PREAMBLE, 'utf8');
+		writeFileSync(join(buildDir, 'job.json'), JSON.stringify(job, null, 2), 'utf8');
+		const status = await runRenderer(RENDERER, join(buildDir, 'job.json'), buildDir);
+		expect(status, JSON.stringify(status)).toMatchObject({ ok: true });
+		const text = pdfText(join(parentDir, 'Draw', 'Draw.pdf'));
+		expect(text).toContain('Before the drawing.');
+		expect(text).toContain('After the drawing.');
+		expect(text).not.toContain('EXCALIDRAW');
+		const tex = readFileSync(join(parentDir, 'Draw', 'Draw.tex'), 'utf8');
+		expect(tex).toMatch(/\\includegraphics\[width=1\\linewidth[^\]]*\]\{media\/[^}]*drawing-1-D\.png\}/);
+		expect(existsSync(join(parentDir, 'Draw', 'media', 'assets', 'drawing-1-D.png'))).toBe(true);
+	}, 300_000);
+});

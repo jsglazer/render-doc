@@ -19,9 +19,17 @@
 //   [text](Other.md)        plain text (no dead links in the PDF)
 //   [text](https://…)       kept as a link
 //
-// With skipDrawings (the Submit copy, Update006), an Excalidraw drawing embedded
-// as a note, a .excalidraw file or an exported image prints nothing, and a line
-// left empty by that goes entirely.
+// Excalidraw drawings (Update006; "Include drawings", after Update007) follow
+// the `drawings` option:
+//   'image'  a drawing embedded as a note or a .excalidraw file becomes a
+//            picture: resolver.stageDrawing registers it for export to PNG
+//            (the shell asks the Excalidraw plugin) and returns its
+//            build-relative path. |500 is a width in px, |90% a share of the
+//            line. An exported image (Name.excalidraw.png) is an ordinary image.
+//   'skip'   a drawing in any of those forms prints nothing, and a line left
+//            empty by that goes entirely.
+//   'text'   (the default, kept for the pure tests) the drawing note's text is
+//            inlined like any other note.
 
 import { extractBody, nextFenceState, stripFrontmatter } from './exportBody';
 
@@ -35,6 +43,9 @@ export interface ExportResolver {
 	readNote(path: string): Promise<string>;
 	// Registers a vault image for copying and returns its build-relative path.
 	stageImage(path: string): string;
+	// Registers an Excalidraw drawing for export to PNG and returns its
+	// build-relative path. Absent: drawings print nothing in 'image' mode.
+	stageDrawing?(path: string): string;
 }
 
 export interface ConversionIssue {
@@ -180,6 +191,12 @@ function imageRef(rel: string): string {
 	return /[\s()<>]/.test(rel) ? `<${rel}>` : rel;
 }
 
+// A drawing's |500 (px) or |90% (of the line), as a pandoc width.
+function drawingSizeAttr(alias: string): string {
+	const pct = /^(\d+(?:\.\d+)?)%$/.exec(alias.trim());
+	return pct ? `{width=${pct[1]}%}` : sizeAttr(alias);
+}
+
 function sizeAttr(alias: string): string {
 	const m = /^(\d+)(?:x\d+)?$/.exec(alias.trim());
 	return m ? `{width=${m[1]}px}` : '';
@@ -190,13 +207,20 @@ interface Context {
 	resolver: ExportResolver;
 	issues: ConversionIssue[];
 	stack: string[];
-	skipDrawings: boolean;
+	drawings: DrawingMode;
+}
+
+export type DrawingMode = 'text' | 'skip' | 'image';
+
+function drawingImage(path: string, alias: string, ctx: Context): string {
+	if (ctx.resolver.stageDrawing === undefined) return '';
+	return `![](${imageRef(ctx.resolver.stageDrawing(path))})${drawingSizeAttr(alias)}`;
 }
 
 async function convertEmbed(inner: string, fromPath: string, ctx: Context, standalone: boolean): Promise<string> {
 	const { linkpath, subpath, alias } = splitTarget(inner);
 	const decoded = decodeTarget(linkpath);
-	if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return '';
+	if (ctx.drawings === 'skip' && DRAWING_NAME_RE.test(decoded)) return '';
 	if (REMOTE_RE.test(decoded)) return `![](${imageRef(decoded)})${sizeAttr(alias)}`;
 
 	const resolved = linkpath === '' ? { path: fromPath, kind: 'markdown' as const } : ctx.resolver.resolveLink(decoded, fromPath);
@@ -208,6 +232,7 @@ async function convertEmbed(inner: string, fromPath: string, ctx: Context, stand
 		const alt = sizeAttr(alias) === '' ? alias : '';
 		return `![${alt}](${imageRef(ctx.resolver.stageImage(resolved.path))})${sizeAttr(alias)}`;
 	}
+	if (ctx.drawings === 'image' && resolved.kind === 'other' && DRAWING_NAME_RE.test(resolved.path)) return drawingImage(resolved.path, alias, ctx);
 	if (resolved.kind !== 'markdown') {
 		ctx.issues.push({ kind: 'unsupported', target: inner });
 		return '';
@@ -217,7 +242,7 @@ async function convertEmbed(inner: string, fromPath: string, ctx: Context, stand
 		return '';
 	}
 	const raw = await ctx.resolver.readNote(resolved.path);
-	if (ctx.skipDrawings && isDrawingNote(raw)) return '';
+	if (ctx.drawings !== 'text' && isDrawingNote(raw)) return ctx.drawings === 'image' ? drawingImage(resolved.path, alias, ctx) : '';
 	let content = extractBody(raw, ctx.sigilChar).body;
 	if (subpath !== '') {
 		const section = extractSubpath(content, subpath);
@@ -249,7 +274,7 @@ async function convertSegment(segment: string, fromPath: string, ctx: Context, s
 
 	out = out.replace(MD_IMAGE_RE, (whole, alt: string, target: string, title: string) => {
 		const decoded = decodeTarget(target);
-		if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return '';
+		if (ctx.drawings === 'skip' && DRAWING_NAME_RE.test(decoded)) return '';
 		if (REMOTE_RE.test(decoded) || decoded.startsWith('/') || decoded.startsWith('assets/')) return whole;
 		const resolved = ctx.resolver.resolveLink(decoded, fromPath);
 		if (!resolved || resolved.kind !== 'image') {
@@ -292,7 +317,7 @@ async function convertText(markdown: string, fromPath: string, ctx: Context): Pr
 			const part = parts[i] ?? '';
 			rebuilt += i % 2 === 1 ? part : await convertSegment(part, fromPath, ctx, standalone);
 		}
-		if (ctx.skipDrawings && rebuilt !== line && BARE_PREFIX_RE.test(rebuilt)) continue;
+		if (ctx.drawings !== 'text' && rebuilt !== line && BARE_PREFIX_RE.test(rebuilt)) continue;
 		out.push(rebuilt);
 	}
 	return out.join('\n');
@@ -303,9 +328,9 @@ export async function toPandocMarkdown(
 	fromPath: string,
 	sigilChar: string,
 	resolver: ExportResolver,
-	options: { skipDrawings?: boolean } = {},
+	options: { drawings?: DrawingMode } = {},
 ): Promise<ConversionResult> {
-	const ctx: Context = { sigilChar, resolver, issues: [], stack: [fromPath], skipDrawings: options.skipDrawings === true };
+	const ctx: Context = { sigilChar, resolver, issues: [], stack: [fromPath], drawings: options.drawings ?? 'text' };
 	const markdown = await convertText(body, fromPath, ctx);
 	return { markdown: collapseBlankRuns(markdown), issues: ctx.issues };
 }

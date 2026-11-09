@@ -26,6 +26,24 @@ module.exports = __toCommonJS(main_exports);
 var import_obsidian4 = require("obsidian");
 
 // src/adapter/obsidianInternals.ts
+function excalidrawAutomate(app) {
+  var _a, _b;
+  const registry = app.plugins;
+  const ea = (_b = (_a = registry == null ? void 0 : registry.plugins) == null ? void 0 : _a["obsidian-excalidraw-plugin"]) == null ? void 0 : _b.ea;
+  if (!ea || typeof ea.createPNG !== "function") return null;
+  const fresh = typeof ea.getAPI === "function" ? ea.getAPI() : ea;
+  return typeof fresh.createPNG === "function" ? fresh : null;
+}
+function excalidrawAvailable(app) {
+  return excalidrawAutomate(app) !== null;
+}
+async function exportDrawingPng(app, drawingPath) {
+  const ea = excalidrawAutomate(app);
+  if (ea === null) throw new Error("the Excalidraw plugin is not enabled");
+  const blob = await ea.createPNG(drawingPath, 2, { withBackground: true, withTheme: false }, void 0, "light", 10);
+  if (!(blob instanceof Blob) || blob.size === 0) throw new Error(`Excalidraw returned no image for ${drawingPath}`);
+  return blob.arrayBuffer();
+}
 function zoteroManagerApi(app) {
   var _a, _b;
   const registry = app.plugins;
@@ -839,14 +857,22 @@ function decodeTarget(raw) {
 function imageRef(rel) {
   return /[\s()<>]/.test(rel) ? `<${rel}>` : rel;
 }
+function drawingSizeAttr(alias) {
+  const pct = /^(\d+(?:\.\d+)?)%$/.exec(alias.trim());
+  return pct ? `{width=${pct[1]}%}` : sizeAttr(alias);
+}
 function sizeAttr(alias) {
   const m = /^(\d+)(?:x\d+)?$/.exec(alias.trim());
   return m ? `{width=${m[1]}px}` : "";
 }
+function drawingImage(path, alias, ctx) {
+  if (ctx.resolver.stageDrawing === void 0) return "";
+  return `![](${imageRef(ctx.resolver.stageDrawing(path))})${drawingSizeAttr(alias)}`;
+}
 async function convertEmbed(inner, fromPath, ctx, standalone) {
   const { linkpath, subpath, alias } = splitTarget(inner);
   const decoded = decodeTarget(linkpath);
-  if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return "";
+  if (ctx.drawings === "skip" && DRAWING_NAME_RE.test(decoded)) return "";
   if (REMOTE_RE.test(decoded)) return `![](${imageRef(decoded)})${sizeAttr(alias)}`;
   const resolved = linkpath === "" ? { path: fromPath, kind: "markdown" } : ctx.resolver.resolveLink(decoded, fromPath);
   if (!resolved) {
@@ -857,6 +883,7 @@ async function convertEmbed(inner, fromPath, ctx, standalone) {
     const alt = sizeAttr(alias) === "" ? alias : "";
     return `![${alt}](${imageRef(ctx.resolver.stageImage(resolved.path))})${sizeAttr(alias)}`;
   }
+  if (ctx.drawings === "image" && resolved.kind === "other" && DRAWING_NAME_RE.test(resolved.path)) return drawingImage(resolved.path, alias, ctx);
   if (resolved.kind !== "markdown") {
     ctx.issues.push({ kind: "unsupported", target: inner });
     return "";
@@ -866,7 +893,7 @@ async function convertEmbed(inner, fromPath, ctx, standalone) {
     return "";
   }
   const raw = await ctx.resolver.readNote(resolved.path);
-  if (ctx.skipDrawings && isDrawingNote(raw)) return "";
+  if (ctx.drawings !== "text" && isDrawingNote(raw)) return ctx.drawings === "image" ? drawingImage(resolved.path, alias, ctx) : "";
   let content = extractBody(raw, ctx.sigilChar).body;
   if (subpath !== "") {
     const section = extractSubpath(content, subpath);
@@ -899,7 +926,7 @@ async function convertSegment(segment, fromPath, ctx, standalone) {
   out += segment.slice(last);
   out = out.replace(MD_IMAGE_RE, (whole, alt, target, title) => {
     const decoded = decodeTarget(target);
-    if (ctx.skipDrawings && DRAWING_NAME_RE.test(decoded)) return "";
+    if (ctx.drawings === "skip" && DRAWING_NAME_RE.test(decoded)) return "";
     if (REMOTE_RE.test(decoded) || decoded.startsWith("/") || decoded.startsWith("assets/")) return whole;
     const resolved = ctx.resolver.resolveLink(decoded, fromPath);
     if (!resolved || resolved.kind !== "image") {
@@ -942,13 +969,14 @@ async function convertText(markdown, fromPath, ctx) {
       const part = (_d = parts[i]) != null ? _d : "";
       rebuilt += i % 2 === 1 ? part : await convertSegment(part, fromPath, ctx, standalone);
     }
-    if (ctx.skipDrawings && rebuilt !== line && BARE_PREFIX_RE.test(rebuilt)) continue;
+    if (ctx.drawings !== "text" && rebuilt !== line && BARE_PREFIX_RE.test(rebuilt)) continue;
     out.push(rebuilt);
   }
   return out.join("\n");
 }
 async function toPandocMarkdown(body, fromPath, sigilChar, resolver, options = {}) {
-  const ctx = { sigilChar, resolver, issues: [], stack: [fromPath], skipDrawings: options.skipDrawings === true };
+  var _a;
+  const ctx = { sigilChar, resolver, issues: [], stack: [fromPath], drawings: (_a = options.drawings) != null ? _a : "text" };
   const markdown = await convertText(body, fromPath, ctx);
   return { markdown: collapseBlankRuns(markdown), issues: ctx.issues };
 }
@@ -1276,42 +1304,47 @@ function tagTable(tags) {
 async function prepareDocument(doc, notePath, sigilChar, resolver, index) {
   const marked = markTags(doc);
   const extraction = extractBody(markSourceLines(marked.doc, sigilChar), sigilChar);
-  const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver);
-  const citations = replaceCitations(separateBlocks(converted.markdown), index);
-  const tagMarked = unmarkRawSpans(citations.markdown);
-  const printed = survivingTagIds(tagMarked);
-  const untagged = stripTagMarkers(tagMarked);
-  const markdown = stripMarkers(untagged);
-  const submitConverted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { skipDrawings: true });
-  const submitCitations = replaceCitations(separateBlocks(submitConverted.markdown), index);
+  const version = async (drawings) => {
+    const converted = await toPandocMarkdown(extraction.body, notePath, sigilChar, resolver, { drawings });
+    const citations = replaceCitations(separateBlocks(converted.markdown), index);
+    const tagMarked = unmarkRawSpans(citations.markdown);
+    const printed = survivingTagIds(tagMarked);
+    const untagged = stripTagMarkers(tagMarked);
+    return {
+      markdown: stripMarkers(untagged),
+      numberedMarkdown: markersToLatex(untagged),
+      markedMarkdown: tagMarked,
+      tags: marked.tags.filter((t) => printed.has(t.id)),
+      submit: { markdown: stripTags(stripMarkers(untagged)) },
+      citations,
+      issues: converted.issues
+    };
+  };
+  const withDrawings = await version("image");
   return {
-    markdown,
-    numberedMarkdown: markersToLatex(untagged),
-    markedMarkdown: tagMarked,
-    tags: marked.tags.filter((t) => printed.has(t.id)),
-    submit: { markdown: stripTags(stripTagMarkers(stripMarkers(submitCitations.markdown))), citations: submitCitations, issues: submitConverted.issues },
-    citations,
-    issues: converted.issues,
+    ...withDrawings,
+    noDrawings: await version("skip"),
     outlineLinesStripped: extraction.outlineLinesStripped,
     isEmpty: extraction.isEmpty
   };
 }
-function versionOf(prepared, mode) {
-  return mode === "submit" ? prepared.submit : prepared;
+function versionOf(prepared, drawings) {
+  return drawings ? prepared : prepared.noDrawings;
 }
 var PREAMBLE_FILE = "preamble.tex";
 var BIB_FILE = "refs.bib";
 function buildFiles(prepared, meta, target, options = {}) {
-  var _a, _b;
+  var _a, _b, _c;
   const mode = (_a = options.mode) != null ? _a : "dev";
-  const cites = versionOf(prepared, mode).citations.citekeys.length > 0;
-  const fontSize = (_b = options.fontSize) != null ? _b : DEFAULT_FONT_SIZE;
+  const version = versionOf(prepared, (_b = options.drawings) != null ? _b : true);
+  const cites = version.citations.citekeys.length > 0;
+  const fontSize = (_c = options.fontSize) != null ? _c : DEFAULT_FONT_SIZE;
   const numbered = options.lineNumbers === true && lineNumbersAllowed(mode);
   const tagged = options.tags === true && tagTableAllowed(mode);
   let body;
-  if (mode === "submit") body = prepared.submit.markdown;
+  if (mode === "submit") body = version.submit.markdown;
   else {
-    const lined = numbered ? markersToLatex(prepared.markedMarkdown) : stripMarkers(prepared.markedMarkdown);
+    const lined = numbered ? markersToLatex(version.markedMarkdown) : stripMarkers(version.markedMarkdown);
     body = tagMarkersToLatex(lined, tagged);
   }
   const files = {
@@ -1322,7 +1355,7 @@ function buildFiles(prepared, meta, target, options = {}) {
     "meta.json": `${JSON.stringify(pandocMetadata(meta), null, 2)}
 `
   };
-  const after = `${cites ? BIBLIOGRAPHY_TRAILER : ""}${tagged ? tagTable(prepared.tags) : ""}`;
+  const after = `${cites ? BIBLIOGRAPHY_TRAILER : ""}${tagged ? tagTable(version.tags) : ""}`;
   if (after !== "") files["after.tex"] = after;
   const job = {
     version: 1,
@@ -1963,6 +1996,7 @@ var RenderExporter = class {
     });
     const discovery = discoverSources(file.path, frontmatter == null ? void 0 : frontmatter[CITE_SOURCES_KEY], notes, (folder) => app.vault.getFolderByPath(folder) !== null);
     const stagedImages = /* @__PURE__ */ new Map();
+    const stagedDrawings = /* @__PURE__ */ new Map();
     const resolver = {
       resolveLink: (linkpath, fromPath) => {
         const target = app.metadataCache.getFirstLinkpathDest(linkpath, fromPath);
@@ -1981,6 +2015,15 @@ var RenderExporter = class {
           stagedImages.set(imagePath, rel);
         }
         return rel;
+      },
+      stageDrawing: (drawingPath) => {
+        let rel = stagedDrawings.get(drawingPath);
+        if (rel === void 0) {
+          const name = path.basename(drawingPath).replace(/\.md$/i, "").replace(/\.excalidraw$/i, "");
+          rel = `assets/drawing-${stagedDrawings.size + 1}-${name}.png`;
+          stagedDrawings.set(drawingPath, rel);
+        }
+        return rel;
       }
     };
     const prepared = await prepareDocument(doc, file.path, DEFAULT_SIGIL_CHAR, resolver, discovery.index);
@@ -1992,6 +2035,8 @@ var RenderExporter = class {
       discovery,
       prepared,
       stagedImages,
+      stagedDrawings,
+      drawingsAvailable: excalidrawAvailable(app),
       noteDir: path.join(base, (_c = (_b = file.parent) == null ? void 0 : _b.path) != null ? _c : ""),
       parentDir: options.parentDir,
       folderName: folderNameFor(stem, options.mode),
@@ -2003,7 +2048,8 @@ var RenderExporter = class {
       openFolder: options.openFolder,
       pageBreaks: false,
       hideUnmatched: false,
-      fontSize: options.fontSize
+      fontSize: options.fontSize,
+      includeDrawings: true
     };
   }
   check(plan) {
@@ -2034,7 +2080,7 @@ var RenderExporter = class {
       return fail("folder", `${target.target} appeared after the dialog checked, so nothing was written. Render again to overwrite it.`);
     }
     let bib = "";
-    const keys = versionOf(plan.prepared, plan.mode).citations.citekeys;
+    const keys = versionOf(plan.prepared, plan.includeDrawings).citations.citekeys;
     if (keys.length > 0) {
       progress("Fetching the bibliography from Zotero\u2026");
       const fetched = await fetchBibLaTeX(zoteroManagerApi(this.app), keys);
@@ -2049,6 +2095,17 @@ var RenderExporter = class {
     for (const [vaultPath, rel] of plan.stagedImages) {
       await fs.promises.copyFile(path.join(base, vaultPath), path.join(buildDir, rel));
     }
+    if (plan.includeDrawings && plan.stagedDrawings.size > 0) {
+      progress("Exporting drawings\u2026");
+      for (const [vaultPath, rel] of plan.stagedDrawings) {
+        try {
+          await fs.promises.writeFile(path.join(buildDir, rel), Buffer.from(await exportDrawingPng(this.app, vaultPath)));
+        } catch (e) {
+          const why = e instanceof Error ? e.message : String(e);
+          return fail("drawings", `Could not export ${vaultPath}: ${why}. Turn off "Include drawings" to render without it.`, buildDir);
+        }
+      }
+    }
     const { files, job } = buildFiles(
       plan.prepared,
       plan.meta,
@@ -2059,7 +2116,7 @@ var RenderExporter = class {
         stem: plan.stem,
         overwrite: plan.overwrite
       },
-      { lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize, tags: plan.includeTags }
+      { lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize, tags: plan.includeTags, drawings: plan.includeDrawings }
     );
     for (const [name, content] of Object.entries(files)) {
       await fs.promises.writeFile(path.join(buildDir, name), content, "utf8");
@@ -2166,6 +2223,12 @@ var RenderModal = class extends import_obsidian2.Modal {
         plan.hideUnmatched = v;
       })
     );
+    new import_obsidian2.Setting(contentEl).setName("Include drawings").setDesc("Print embedded drawings as pictures. Off leaves them out.").addToggle(
+      (t) => t.setValue(plan.includeDrawings).onChange((v) => {
+        plan.includeDrawings = v;
+        this.renderSummary();
+      })
+    );
     new import_obsidian2.Setting(contentEl).setName("Open export folder").setDesc("Show the new PDF in Finder when rendering finishes.").addToggle(
       (t) => t.setValue(plan.openFolder).onChange((v) => {
         plan.openFolder = v;
@@ -2209,8 +2272,9 @@ var RenderModal = class extends import_obsidian2.Modal {
     const el = this.summaryEl;
     if (!el) return;
     el.empty();
-    const { discovery, prepared, mode } = this.plan;
-    const { citations, issues } = versionOf(prepared, mode);
+    const { discovery, prepared, includeDrawings, stagedDrawings, drawingsAvailable } = this.plan;
+    const version = versionOf(prepared, includeDrawings);
+    const { citations, issues } = version;
     const scope = discovery.roots.length === 0 ? "no folders" : discovery.roots.map((r) => r === "" ? "/" : r).join(", ");
     el.createEl("h4", { text: "Summary" });
     const list = el.createEl("ul");
@@ -2219,11 +2283,15 @@ var RenderModal = class extends import_obsidian2.Modal {
       text: `Citations resolved: ${citations.resolved.length} (${citations.citekeys.length} distinct work${citations.citekeys.length === 1 ? "" : "s"})`
     });
     list.createEl("li", { text: `Unmatched, left highlighted: ${citations.unmatched.length}` });
-    if (tagTableAllowed(this.plan.mode)) list.createEl("li", { text: `Tags found: ${prepared.tags.length}` });
+    if (tagTableAllowed(this.plan.mode)) list.createEl("li", { text: `Tags found: ${version.tags.length}` });
+    if (stagedDrawings.size > 0) {
+      list.createEl("li", { text: `Drawings: ${stagedDrawings.size}, ${includeDrawings ? "printed as pictures" : "left out"}` });
+    }
     if (prepared.outlineLinesStripped > 0) {
       list.createEl("li", { text: `Outline lines stripped: ${prepared.outlineLinesStripped}` });
     }
     const warnings = [
+      ...includeDrawings && stagedDrawings.size > 0 && !drawingsAvailable ? ['The Excalidraw plugin is not enabled, so the drawings cannot be exported. Enable it, or turn off "Include drawings".'] : [],
       ...discovery.warnings,
       ...citations.unmatched.map((u) => `${u.text} \u2014 ${u.message}`),
       ...issues.map((i) => `${i.kind} embed or link: ${i.target}`)
@@ -2389,7 +2457,7 @@ var RenderDocPlugin = class extends import_obsidian4.Plugin {
 Log: ${where}` : ""}`, ERROR_NOTICE_MS);
         return;
       }
-      const unmatched = versionOf(plan.prepared, plan.mode).citations.unmatched.length;
+      const unmatched = versionOf(plan.prepared, plan.includeDrawings).citations.unmatched.length;
       const tail = unmatched > 0 ? `
 ${unmatched} citation${unmatched === 1 ? " is" : "s are"} ${plan.hideUnmatched ? "unmatched (not highlighted)" : "highlighted as unmatched"}.` : "";
       new import_obsidian4.Notice(`Rendered to ${outcome.folder}${tail}`, 1e4);

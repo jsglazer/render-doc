@@ -155,6 +155,16 @@ export class RenderModal extends Modal {
 			);
 
 		new Setting(contentEl)
+			.setName('Include drawings')
+			.setDesc('Print embedded drawings as pictures. Off leaves them out.')
+			.addToggle((t) =>
+				t.setValue(plan.includeDrawings).onChange((v) => {
+					plan.includeDrawings = v;
+					this.renderSummary();
+				}),
+			);
+
+		new Setting(contentEl)
 			.setName('Open export folder')
 			.setDesc('Show the new PDF in Finder when rendering finishes.')
 			.addToggle((t) =>
@@ -209,8 +219,9 @@ export class RenderModal extends Modal {
 		const el = this.summaryEl;
 		if (!el) return;
 		el.empty();
-		const { discovery, prepared, mode } = this.plan;
-		const { citations, issues } = versionOf(prepared, mode);
+		const { discovery, prepared, includeDrawings, stagedDrawings, drawingsAvailable } = this.plan;
+		const version = versionOf(prepared, includeDrawings);
+		const { citations, issues } = version;
 		const scope = discovery.roots.length === 0 ? 'no folders' : discovery.roots.map((r) => (r === '' ? '/' : r)).join(', ');
 		el.createEl('h4', { text: 'Summary' });
 		const list = el.createEl('ul');
@@ -219,12 +230,16 @@ export class RenderModal extends Modal {
 			text: `Citations resolved: ${citations.resolved.length} (${citations.citekeys.length} distinct work${citations.citekeys.length === 1 ? '' : 's'})`,
 		});
 		list.createEl('li', { text: `Unmatched, left highlighted: ${citations.unmatched.length}` });
-		if (tagTableAllowed(this.plan.mode)) list.createEl('li', { text: `Tags found: ${prepared.tags.length}` });
+		if (tagTableAllowed(this.plan.mode)) list.createEl('li', { text: `Tags found: ${version.tags.length}` });
+		if (stagedDrawings.size > 0) {
+			list.createEl('li', { text: `Drawings: ${stagedDrawings.size}, ${includeDrawings ? 'printed as pictures' : 'left out'}` });
+		}
 		if (prepared.outlineLinesStripped > 0) {
 			list.createEl('li', { text: `Outline lines stripped: ${prepared.outlineLinesStripped}` });
 		}
 
 		const warnings = [
+			...(includeDrawings && stagedDrawings.size > 0 && !drawingsAvailable ? ['The Excalidraw plugin is not enabled, so the drawings cannot be exported. Enable it, or turn off "Include drawings".'] : []),
 			...discovery.warnings,
 			...citations.unmatched.map((u) => `${u.text} — ${u.message}`),
 			...issues.map((i) => `${i.kind} embed or link: ${i.target}`),

@@ -6,7 +6,9 @@
 //
 //   $TMPDIR/render-doc-build/<random>/
 //     source.md      the converted body with raw \autocite / \rdunmatched spans
-//     assets/        vault images the note embeds (pandoc extracts them to media/)
+//     assets/        vault images the note embeds, and its Excalidraw drawings
+//                    exported to PNG when "Include drawings" is on (pandoc
+//                    extracts them to media/)
 //     meta.tex  preamble.tex  cite.tex  after.tex  meta.json   (see src/core/latex.ts;
 //                    preamble.tex is the Dev or Submit preamble from the settings page)
 //     refs.bib       BibLaTeX from Zotero Manager (only when the note cites)
@@ -18,7 +20,7 @@
 import type { App, TFile } from 'obsidian';
 import { FileSystemAdapter } from 'obsidian';
 
-import { zoteroManagerApi } from '../adapter/obsidianInternals';
+import { excalidrawAvailable, exportDrawingPng, zoteroManagerApi } from '../adapter/obsidianInternals';
 import type { DocMeta, TargetCheck } from '../core/document';
 import { checkExportTarget, folderNameFor, readDocMeta, safeStem } from '../core/document';
 import { DEFAULT_SIGIL_CHAR } from '../core/exportBody';
@@ -41,6 +43,8 @@ export interface RenderPlan {
 	discovery: SourceDiscovery;
 	prepared: PreparedDocument;
 	stagedImages: Map<string, string>; // vault path → build-relative path
+	stagedDrawings: Map<string, string>; // drawing vault path → build-relative PNG path
+	drawingsAvailable: boolean; // the Excalidraw plugin can export them
 	noteDir: string; // absolute
 	parentDir: string; // absolute; edited by the dialog
 	folderName: string; // edited by the dialog
@@ -59,6 +63,9 @@ export interface RenderPlan {
 	hideUnmatched: boolean;
 	// Edited by the dialog: body font size in pt. Opens on the settings default.
 	fontSize: FontSize;
+	// Edited by the dialog: Excalidraw drawings as pictures (on) or left out.
+	// Both modes. Not remembered — every dialog opens with it on.
+	includeDrawings: boolean;
 }
 
 export interface PlanOptions {
@@ -100,6 +107,7 @@ export class RenderExporter {
 		const discovery = discoverSources(file.path, frontmatter?.[CITE_SOURCES_KEY], notes, (folder) => app.vault.getFolderByPath(folder) !== null);
 
 		const stagedImages = new Map<string, string>();
+		const stagedDrawings = new Map<string, string>();
 		const resolver: ExportResolver = {
 			resolveLink: (linkpath, fromPath) => {
 				const target = app.metadataCache.getFirstLinkpathDest(linkpath, fromPath);
@@ -119,6 +127,15 @@ export class RenderExporter {
 				}
 				return rel;
 			},
+			stageDrawing: (drawingPath) => {
+				let rel = stagedDrawings.get(drawingPath);
+				if (rel === undefined) {
+					const name = path.basename(drawingPath).replace(/\.md$/i, '').replace(/\.excalidraw$/i, '');
+					rel = `assets/drawing-${stagedDrawings.size + 1}-${name}.png`;
+					stagedDrawings.set(drawingPath, rel);
+				}
+				return rel;
+			},
 		};
 		const prepared = await prepareDocument(doc, file.path, DEFAULT_SIGIL_CHAR, resolver, discovery.index);
 		if (prepared.isEmpty) return `${file.basename} has no body text to render.`;
@@ -130,6 +147,8 @@ export class RenderExporter {
 			discovery,
 			prepared,
 			stagedImages,
+			stagedDrawings,
+			drawingsAvailable: excalidrawAvailable(app),
 			noteDir: path.join(base, file.parent?.path ?? ''),
 			parentDir: options.parentDir,
 			folderName: folderNameFor(stem, options.mode),
@@ -142,6 +161,7 @@ export class RenderExporter {
 			pageBreaks: false,
 			hideUnmatched: false,
 			fontSize: options.fontSize,
+			includeDrawings: true,
 		};
 	}
 
@@ -177,7 +197,7 @@ export class RenderExporter {
 
 		// Before anything is compiled: every cited key must come back from Zotero.
 		let bib = '';
-		const keys = versionOf(plan.prepared, plan.mode).citations.citekeys;
+		const keys = versionOf(plan.prepared, plan.includeDrawings).citations.citekeys;
 		if (keys.length > 0) {
 			progress('Fetching the bibliography from Zotero…');
 			const fetched = await fetchBibLaTeX(zoteroManagerApi(this.app), keys);
@@ -194,6 +214,17 @@ export class RenderExporter {
 		for (const [vaultPath, rel] of plan.stagedImages) {
 			await fs.promises.copyFile(path.join(base, vaultPath), path.join(buildDir, rel));
 		}
+		if (plan.includeDrawings && plan.stagedDrawings.size > 0) {
+			progress('Exporting drawings…');
+			for (const [vaultPath, rel] of plan.stagedDrawings) {
+				try {
+					await fs.promises.writeFile(path.join(buildDir, rel), Buffer.from(await exportDrawingPng(this.app, vaultPath)));
+				} catch (e) {
+					const why = e instanceof Error ? e.message : String(e);
+					return fail('drawings', `Could not export ${vaultPath}: ${why}. Turn off "Include drawings" to render without it.`, buildDir);
+				}
+			}
+		}
 		const { files, job } = buildFiles(
 			plan.prepared,
 			plan.meta,
@@ -204,7 +235,7 @@ export class RenderExporter {
 				stem: plan.stem,
 				overwrite: plan.overwrite,
 			},
-			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize, tags: plan.includeTags },
+			{ lineNumbers: plan.lineNumbers, mode: plan.mode, pageBreaks: plan.pageBreaks, hideUnmatched: plan.hideUnmatched, fontSize: plan.fontSize, tags: plan.includeTags, drawings: plan.includeDrawings },
 		);
 		for (const [name, content] of Object.entries(files)) {
 			await fs.promises.writeFile(path.join(buildDir, name), content, 'utf8');

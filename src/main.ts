@@ -103,7 +103,7 @@ export default class RenderDocPlugin extends Plugin {
 				new Notice(`Render Doc failed (${outcome.stage}): ${outcome.message}${where ? `\n\nLog: ${where}` : ''}`, ERROR_NOTICE_MS);
 				return;
 			}
-			const unmatched = versionOf(plan.prepared, plan.mode).citations.unmatched.length;
+			const unmatched = versionOf(plan.prepared, plan.includeDrawings).citations.unmatched.length;
 			const tail = unmatched > 0 ? `\n${unmatched} citation${unmatched === 1 ? ' is' : 's are'} ${plan.hideUnmatched ? 'unmatched (not highlighted)' : 'highlighted as unmatched'}.` : '';
 			new Notice(`Rendered to ${outcome.folder}${tail}`, 10000);
 			if (plan.openFolder) revealInFinder(outcome.pdf);
