@@ -27,6 +27,13 @@ describe('readDocMeta', () => {
 		expect(readDocMeta({ class: 'Methods', classnum: '(POGO-801-001)' }, 'n').classNum).toBe('(POGO-801-001)');
 		expect(readDocMeta({ title: 'Long Title' }, 'n').shortTitle).toBe('Long Title');
 	});
+	it('reads titleprint for the headers, the short title falling back to it', () => {
+		const m = readDocMeta({ title: 'Long Title', titleprint: 'Print' }, 'n');
+		expect(m).toMatchObject({ title: 'Long Title', printTitle: 'Print', shortTitle: 'Print', hasTitleBlock: true });
+		expect(readDocMeta({ title: 'Long Title', titleprint: 'Print', titleshort: 'Short' }, 'n').shortTitle).toBe('Short');
+		expect(readDocMeta({ title: 'Long Title' }, 'n').printTitle).toBe('Long Title');
+		expect(metaHeader(readDocMeta({ title: 'A', titleprint: 'P_1' }, 'n'))).toContain('\\def\\DocPrintTitle{P\\_1}');
+	});
 	it('has a title block only when the note has a title-block field (Update003)', () => {
 		expect(readDocMeta(undefined, 'n', 'Default').hasTitleBlock).toBe(false);
 		expect(readDocMeta({ tags: ['x'], cite_sources: 'Lib', title: '  ' }, 'n', 'Default').hasTitleBlock).toBe(false);

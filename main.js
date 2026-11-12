@@ -215,27 +215,29 @@ function separateBlocks(markdown) {
 }
 
 // src/core/document.ts
-var TITLE_BLOCK_KEYS = ["title", "subtitle", "titleshort", "class", "course", "coursenum", "classnum", "prof", "date"];
+var TITLE_BLOCK_KEYS = ["title", "subtitle", "titleprint", "titleshort", "class", "course", "coursenum", "classnum", "prof", "date"];
 function asText(value) {
   if (typeof value === "string" && value.trim() !== "") return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return null;
 }
 function readDocMeta(frontmatter, basename, defaultAuthor = "") {
-  var _a, _b, _c, _d;
+  var _a, _b, _c, _d, _e;
   const fm = frontmatter != null ? frontmatter : {};
   const rawAuthor = fm.author;
   const noteAuthors = (Array.isArray(rawAuthor) ? rawAuthor : [rawAuthor]).map(asText).filter((a) => a !== null);
   const fallback = asText(defaultAuthor);
   const title = (_a = asText(fm.title)) != null ? _a : basename;
+  const printTitle = (_b = asText(fm.titleprint)) != null ? _b : title;
   const hasTitleBlock = noteAuthors.length > 0 || TITLE_BLOCK_KEYS.some((k) => asText(fm[k]) !== null);
   return {
     title,
     subtitle: asText(fm.subtitle),
-    shortTitle: (_b = asText(fm.titleshort)) != null ? _b : title,
+    printTitle,
+    shortTitle: (_c = asText(fm.titleshort)) != null ? _c : printTitle,
     authors: noteAuthors.length > 0 ? noteAuthors : fallback !== null ? [fallback] : [],
-    className: (_c = asText(fm.class)) != null ? _c : asText(fm.course),
-    classNum: (_d = asText(fm.coursenum)) != null ? _d : asText(fm.classnum),
+    className: (_d = asText(fm.class)) != null ? _d : asText(fm.course),
+    classNum: (_e = asText(fm.coursenum)) != null ? _e : asText(fm.classnum),
     prof: asText(fm.prof),
     date: asText(fm.date),
     hasTitleBlock
@@ -341,6 +343,7 @@ function metaHeader(meta) {
     "% \\providecommand defaults leave these alone.",
     `\\def\\DocTitle{${t}}`,
     def("DocSubtitle", meta.subtitle),
+    def("DocPrintTitle", meta.printTitle),
     def("DocShortTitle", meta.shortTitle),
     `\\def\\DocAuthor{${author}}`,
     def("DocClass", meta.className),
@@ -1017,10 +1020,11 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
 
 % Per-note values, set by Render Doc's meta.tex from the note's frontmatter
-% (title, subtitle, titleshort, author, class, coursenum, prof, date). Empty when absent; the
-% header title falls back to \jobname, the short title to the title.
+% (title, subtitle, titleprint, titleshort, author, class, coursenum, prof, date). Empty when absent; the
+% title falls back to \jobname, the print title (Dev header) to the title, the short title (Submit header) to the print title.
 \providecommand{\DocTitle}{}
 \providecommand{\DocSubtitle}{}
+\providecommand{\DocPrintTitle}{}
 \providecommand{\DocShortTitle}{}
 \providecommand{\DocAuthor}{}
 \providecommand{\DocClass}{}
@@ -1028,7 +1032,8 @@ var COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right=.
 \providecommand{\DocProf}{}
 \providecommand{\DocDate}{}
 \newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
-\newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderTitle}{\DocShortTitle}}
+\newcommand{\HeaderPrintTitle}{\ifdefempty{\DocPrintTitle}{\HeaderTitle}{\DocPrintTitle}}
+\newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderPrintTitle}{\DocShortTitle}}
 
 `;
 var COVER_PAGE = String.raw`
@@ -1068,9 +1073,9 @@ var NO_TITLE = String.raw`
 \renewcommand{\maketitle}{}
 `;
 var DEV_HEADER = String.raw`
-% Dev: title and author in the header; page x of y and a date/time stamp in the footer.
+% Dev: print title (titleprint:, else the title) and author in the header; page x of y and a date/time stamp in the footer.
 \fancyhead{} % clear all header fields
-\fancyhead[L]{\small{\textbf{\HeaderTitle}}}
+\fancyhead[L]{\small{\textbf{\HeaderPrintTitle}}}
 \fancyhead[R]{\small{\DocAuthor}}
 \fancyfoot{}
 \fancyfoot[L]{\scriptsize{\thepage\ of \pageref{LastPage}}}
@@ -1098,7 +1103,7 @@ function preambleFingerprint(text2) {
   }
   return h.toString(16).padStart(8, "0");
 }
-var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a", "00249892", "7a81154c", "0af1a146", "e2c4d938"]);
+var RETIRED_DEFAULT_FINGERPRINTS = /* @__PURE__ */ new Set(["1e0b419f", "a29fbe40", "f19a1df5", "2afbc73a", "00249892", "7a81154c", "0af1a146", "e2c4d938", "11980608", "55621b22"]);
 
 // src/core/settings.ts
 var FONT_SIZES = [8, 9, 10, 11, 12, 14, 17, 20];
@@ -2348,7 +2353,7 @@ var RenderDocSettingTab = class extends import_obsidian3.PluginSettingTab {
     new import_obsidian3.Setting(containerEl).setName("LaTeX preambles").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "Included in every render after Render Doc defines \\DocTitle, \\DocShortTitle, \\DocAuthor, \\DocClass, \\DocProf and \\DocDate from the note. \\maketitle draws the cover page. Clearing a box restores its default."
+      text: "Included in every render after Render Doc defines \\DocTitle, \\DocPrintTitle, \\DocShortTitle, \\DocAuthor, \\DocClass, \\DocProf and \\DocDate from the note. \\maketitle draws the cover page. Clearing a box restores its default."
     });
     this.preambleSetting("Dev preamble", "Used for Dev renders: title and author header, page x of y bottom left, date/time stamp bottom right.", "devPreamble");
     this.preambleSetting("Submit preamble", "Used for Submit renders: short title (bold) and author header, page x of y centred, no date/time stamp.", "submitPreamble");

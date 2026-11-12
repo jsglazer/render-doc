@@ -76,7 +76,7 @@ export class RenderDocSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName('LaTeX preambles').setHeading();
 		containerEl.createEl('p', {
 			cls: 'setting-item-description',
-			text: 'Included in every render after Render Doc defines \\DocTitle, \\DocShortTitle, \\DocAuthor, \\DocClass, \\DocProf and \\DocDate from the note. \\maketitle draws the cover page. Clearing a box restores its default.',
+			text: 'Included in every render after Render Doc defines \\DocTitle, \\DocPrintTitle, \\DocShortTitle, \\DocAuthor, \\DocClass, \\DocProf and \\DocDate from the note. \\maketitle draws the cover page. Clearing a box restores its default.',
 		});
 		this.preambleSetting('Dev preamble', 'Used for Dev renders: title and author header, page x of y bottom left, date/time stamp bottom right.', 'devPreamble');
 		this.preambleSetting('Submit preamble', 'Used for Submit renders: short title (bold) and author header, page x of y centred, no date/time stamp.', 'submitPreamble');

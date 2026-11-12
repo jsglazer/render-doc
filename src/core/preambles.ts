@@ -4,7 +4,7 @@
 //
 // Both began as Josh's LatexPre.tex. Render Doc's meta.tex (included BEFORE
 // the preamble, see src/core/latex.ts) defines the per-note macros they use:
-//   \DocTitle  \DocSubtitle  \DocShortTitle  \DocAuthor  \DocClass  \DocClassNum  \DocProf  \DocDate
+//   \DocTitle  \DocSubtitle  \DocPrintTitle  \DocShortTitle  \DocAuthor  \DocClass  \DocClassNum  \DocProf  \DocDate
 // Each is \providecommand'ed here too, so the delivered .tex and a preamble
 // used on its own still compile.
 //
@@ -37,10 +37,11 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
 \renewcommand{\sectionmark}[1]{\markright{Sec.\thesection:\ #1}{}}
 
 % Per-note values, set by Render Doc's meta.tex from the note's frontmatter
-% (title, subtitle, titleshort, author, class, coursenum, prof, date). Empty when absent; the
-% header title falls back to \jobname, the short title to the title.
+% (title, subtitle, titleprint, titleshort, author, class, coursenum, prof, date). Empty when absent; the
+% title falls back to \jobname, the print title (Dev header) to the title, the short title (Submit header) to the print title.
 \providecommand{\DocTitle}{}
 \providecommand{\DocSubtitle}{}
+\providecommand{\DocPrintTitle}{}
 \providecommand{\DocShortTitle}{}
 \providecommand{\DocAuthor}{}
 \providecommand{\DocClass}{}
@@ -48,7 +49,8 @@ const COMMON = String.raw`\usepackage[top=.75in, bottom=.75in, left=.75in, right
 \providecommand{\DocProf}{}
 \providecommand{\DocDate}{}
 \newcommand{\HeaderTitle}{\ifdefempty{\DocTitle}{\jobname}{\DocTitle}}
-\newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderTitle}{\DocShortTitle}}
+\newcommand{\HeaderPrintTitle}{\ifdefempty{\DocPrintTitle}{\HeaderTitle}{\DocPrintTitle}}
+\newcommand{\HeaderShortTitle}{\ifdefempty{\DocShortTitle}{\HeaderPrintTitle}{\DocShortTitle}}
 
 `;
 
@@ -92,9 +94,9 @@ const NO_TITLE = String.raw`
 `;
 
 const DEV_HEADER = String.raw`
-% Dev: title and author in the header; page x of y and a date/time stamp in the footer.
+% Dev: print title (titleprint:, else the title) and author in the header; page x of y and a date/time stamp in the footer.
 \fancyhead{} % clear all header fields
-\fancyhead[L]{\small{\textbf{\HeaderTitle}}}
+\fancyhead[L]{\small{\textbf{\HeaderPrintTitle}}}
 \fancyhead[R]{\small{\DocAuthor}}
 \fancyfoot{}
 \fancyfoot[L]{\scriptsize{\thepage\ of \pageref{LastPage}}}
@@ -130,4 +132,4 @@ export function preambleFingerprint(text: string): string {
 // Earlier built-in defaults (1.0.4 Dev, 1.0.4 Submit, 1.0.5 Dev, 1.0.5 Submit, 1.0.13 Dev, 1.0.13 Submit, 1.0.19 Dev, 1.0.19 Submit). A saved preamble that
 // matches one was never edited, so it follows the current default instead.
 // Add the old fingerprints here whenever a default changes.
-export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40', 'f19a1df5', '2afbc73a', '00249892', '7a81154c', '0af1a146', 'e2c4d938']);
+export const RETIRED_DEFAULT_FINGERPRINTS: ReadonlySet<string> = new Set(['1e0b419f', 'a29fbe40', 'f19a1df5', '2afbc73a', '00249892', '7a81154c', '0af1a146', 'e2c4d938', '11980608', '55621b22']);

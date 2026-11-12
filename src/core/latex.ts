@@ -65,6 +65,7 @@ export function metaHeader(meta: DocMeta): string {
 		'% \\providecommand defaults leave these alone.',
 		`\\def\\DocTitle{${t}}`,
 		def('DocSubtitle', meta.subtitle),
+		def('DocPrintTitle', meta.printTitle),
 		def('DocShortTitle', meta.shortTitle),
 		`\\def\\DocAuthor{${author}}`,
 		def('DocClass', meta.className),

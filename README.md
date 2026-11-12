@@ -45,7 +45,8 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 | --- | --- |
 | `title:` | Cover page, Dev header and PDF title. Defaults to the note name. |
 | `subtitle:` | Submit cover page, centred below the title at 70% of its size. Left off when absent. |
-| `titleshort:` | Submit header. Defaults to the title. |
+| `titleprint:` | Dev header (and the Submit header when there is no `titleshort:`), in place of the full title. Defaults to the title. |
+| `titleshort:` | Submit header. Defaults to `titleprint:`, then the title. |
 | `author:` | Cover page and header. A string or a list; overrides the Default author setting. |
 | `class:` (or `course:`), `coursenum:` (or `classnum:`), `prof:` | Submit cover page, the course number on the line under the class. Left off when absent. |
 | `date:` | Submit cover page, written out in full (`2026-10-28` → "Wednesday, October 28th, 2026"). Today's date when blank. |
