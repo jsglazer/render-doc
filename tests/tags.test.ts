@@ -61,8 +61,8 @@ describe('Submit renders drop tags', () => {
 		readNote: () => Promise.resolve('Embedded #inembed text.'),
 		stageImage: () => 'assets/1-x.png',
 	};
-	const index = new Map<string, CitationEntry[]>([['Bonica, 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
-	const doc = ['---', 'title: T', '---', '# Heading #fix', '', '(Bonica, 2018) says #fix so.', '#todo', 'More.', '', '![[Other]]'].join('\n');
+	const index = new Map<string, CitationEntry[]>([['Bonica 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
+	const doc = ['---', 'title: T', '---', '# Heading #fix', '', '(Bonica 2018) says #fix so.', '#todo', 'More.', '', '![[Other]]'].join('\n');
 	const target = { resourcePath: '/v', parentDir: '/out', folderName: 'P', stem: 'P', overwrite: false };
 
 	it('Submit source.md has no tags, keeps headings and citations; Dev keeps the tags', async () => {

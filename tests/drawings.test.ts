@@ -5,7 +5,7 @@ import type { ExportResolver } from '../src/core/obsidianMarkdown';
 import { buildFiles, prepareDocument, versionOf } from '../src/core/render';
 import type { CitationEntry } from '../src/core/sources';
 
-const DRAWING = ['---', 'excalidraw-plugin: parsed', 'tags: [excalidraw]', '---', '==Switch to EXCALIDRAW VIEW== (Bonica, 2018)', '', '# Excalidraw Data', '', '## Text Elements', 'A label'].join('\n');
+const DRAWING = ['---', 'excalidraw-plugin: parsed', 'tags: [excalidraw]', '---', '==Switch to EXCALIDRAW VIEW== (Bonica 2018)', '', '# Excalidraw Data', '', '## Text Elements', 'A label'].join('\n');
 const NOTES: Record<string, string> = {
 	'D.excalidraw.md': DRAWING,
 	'Renamed.md': DRAWING,
@@ -27,7 +27,7 @@ const resolver: ExportResolver = {
 	},
 	stageDrawing: (path) => `assets/drawing-${path}.png`,
 };
-const index = new Map<string, CitationEntry[]>([['Bonica, 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
+const index = new Map<string, CitationEntry[]>([['Bonica 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
 const target = { resourcePath: '/v', parentDir: '/out', folderName: 'P', stem: 'P', overwrite: false };
 
 // "Include drawings" off: the text both modes print (Submit's, here).

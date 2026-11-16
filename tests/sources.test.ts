@@ -32,10 +32,10 @@ function source(path: string, citekey: unknown, citeshort: unknown): NoteMeta {
 
 const NOTES: NoteMeta[] = [
 	{ path: NOTE, frontmatter: { title: 'Paper' } },
-	source('Classes/2026-B/POGO 801/Assign/Polarization/Sources/Bonica-2018.md', 'Bonica-InferringRollCallScores-2018', 'Bonica, 2018'),
-	source('Classes/2026-B/POGO 801/Assign/Polarization/Sources/Shor-2011.md', 'ShorMcCarty-Ideological-2011', 'Shor and McCarty, 2011'),
-	source('Classes/2026-B/POGO 801/Assign/Other.md', 'Other-2020', 'Other, 2020'),
-	source('Classes/2026-B/POGO 801/Readings/Far.md', 'Far-2019', 'Far, 2019'),
+	source('Classes/2026-B/POGO 801/Assign/Polarization/Sources/Bonica-2018.md', 'Bonica-InferringRollCallScores-2018', 'Bonica 2018'),
+	source('Classes/2026-B/POGO 801/Assign/Polarization/Sources/Shor-2011.md', 'ShorMcCarty-Ideological-2011', 'Shor and McCarty 2011'),
+	source('Classes/2026-B/POGO 801/Assign/Other.md', 'Other-2020', 'Other 2020'),
+	source('Classes/2026-B/POGO 801/Readings/Far.md', 'Far-2019', 'Far 2019'),
 	source('Library/Sources/Lib.md', 'Lib-2001', 'Lib, 2001'),
 	source('Classes/2026-B/POGO 801/Assign/EmptyShort.md', 'Empty-2000', ''),
 	source('Classes/2026-B/POGO 801/Assign/NoKey.md', undefined, 'NoKey, 2000'),
@@ -108,9 +108,9 @@ describe('resolveScope', () => {
 			expect(r.roots).toEqual(['Library']);
 		});
 		it('resolves citations from the class Sources folder', () => {
-			const notes = [source('Classes/2026-B/RD/Sources/B.md', 'Bonica-2018', 'Bonica, 2018')];
+			const notes = [source('Classes/2026-B/RD/Sources/B.md', 'Bonica-2018', 'Bonica 2018')];
 			const d = discoverSources(NESTED, undefined, notes, having('Classes/2026-B/RD/Assign', 'Classes/2026-B/RD/Sources'));
-			expect(d.index.get('Bonica, 2018')).toEqual([{ citekey: 'Bonica-2018', path: 'Classes/2026-B/RD/Sources/B.md' }]);
+			expect(d.index.get('Bonica 2018')).toEqual([{ citekey: 'Bonica-2018', path: 'Classes/2026-B/RD/Sources/B.md' }]);
 		});
 	});
 
@@ -141,18 +141,18 @@ describe('collectSourceNotes', () => {
 
 describe('normalizeCiteshort', () => {
 	it('trims, collapses whitespace and applies NFC only', () => {
-		expect(normalizeCiteshort('  Bonica,\t 2018 ')).toBe('Bonica, 2018');
+		expect(normalizeCiteshort('  Bonica\t 2018 ')).toBe('Bonica 2018');
 		expect(normalizeCiteshort('Müller, 2001')).toBe('Müller, 2001');
 	});
 	it('does no and/&, et al. or hyphen folding', () => {
-		expect(normalizeCiteshort('Shor & McCarty, 2011')).not.toBe(normalizeCiteshort('Shor and McCarty, 2011'));
+		expect(normalizeCiteshort('Shor & McCarty 2011')).not.toBe(normalizeCiteshort('Shor and McCarty 2011'));
 		expect(normalizeCiteshort('Handan‐Nader et al., 2026')).not.toBe(normalizeCiteshort('Handan-Nader et al., 2026'));
 	});
 });
 
 describe('ambiguity', () => {
-	const dupSameKey = [source('A/x.md', 'Same-2018', 'Bonica, 2018'), source('A/y.md', 'Same-2018', 'Bonica,  2018')];
-	const dupDifferentKeys = [source('A/x.md', 'Bonica-A-2018', 'Bonica, 2018'), source('A/y.md', 'Bonica-B-2018', 'Bonica, 2018')];
+	const dupSameKey = [source('A/x.md', 'Same-2018', 'Bonica 2018'), source('A/y.md', 'Same-2018', 'Bonica,  2018')];
+	const dupDifferentKeys = [source('A/x.md', 'Bonica-A-2018', 'Bonica 2018'), source('A/y.md', 'Bonica-B-2018', 'Bonica 2018')];
 
 	it('does not flag duplicates that share a citekey', () => {
 		expect(findAmbiguities(buildCiteIndex(collectSourceNotes(dupSameKey, ['A'])))).toEqual([]);
@@ -161,7 +161,7 @@ describe('ambiguity', () => {
 	it('flags a citeshort shared by different citekeys', () => {
 		const amb = findAmbiguities(buildCiteIndex(collectSourceNotes(dupDifferentKeys, ['A'])));
 		expect(amb).toHaveLength(1);
-		expect(amb[0]?.citeshort).toBe('Bonica, 2018');
+		expect(amb[0]?.citeshort).toBe('Bonica 2018');
 		expect(amb[0]?.entries.map((e) => e.citekey)).toEqual(['Bonica-A-2018', 'Bonica-B-2018']);
 	});
 });
@@ -171,10 +171,10 @@ describe('discoverSources', () => {
 		const d = discoverSources(NOTE, undefined, NOTES, exists);
 		expect(d.roots).toEqual(['Classes/2026-B/POGO 801/Assign']);
 		expect(d.sources).toHaveLength(3);
-		expect(d.index.get('Bonica, 2018')).toEqual([
+		expect(d.index.get('Bonica 2018')).toEqual([
 			{ citekey: 'Bonica-InferringRollCallScores-2018', path: 'Classes/2026-B/POGO 801/Assign/Polarization/Sources/Bonica-2018.md' },
 		]);
-		expect(d.index.has('Far, 2019')).toBe(false);
+		expect(d.index.has('Far 2019')).toBe(false);
 		expect(d.ambiguities).toEqual([]);
 	});
 

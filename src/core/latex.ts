@@ -52,7 +52,7 @@ export function autociteCommand(citekey: string, locator: string): string {
 }
 
 // Several works in one parenthetical: \autocites[p1]{k1}{k2}…, printed as
-// (Hall, 2014: 12; Barber, 2016). Every postnote is given as `[…]` when it is
+// (Hall 2014: 12; Barber 2016), or (Barber 2016, 2022) for one author's works. Every postnote is given as `[…]` when it is
 // non-empty; an empty one is omitted (a lone `[x]` is a postnote, not a prenote).
 export function autocitesCommand(cites: { citekey: string; locator: string }[]): string {
 	return `\\autocites${cites.map((c) => (c.locator === '' ? `{${c.citekey}}` : `[${latexOptionalArg(c.locator)}]{${c.citekey}}`)).join('')}`;
@@ -126,16 +126,17 @@ export function unmatchedBlock(hide: boolean): string[] {
 	];
 }
 
-// biblatex-ext's ext-authoryear (TeX Live 2024 has no apsa.bbx), configured so
-// \autocite prints exactly (Bonica, 2018: 123), \autocites keeps the works in
-// the order written, (Shor and McCarty, 2011; Bonica, 2018: 9), and the bibliography reads
+// biblatex-ext's ext-authoryear-comp (TeX Live 2024 has no apsa.bbx), configured
+// so \autocite prints exactly (Bonica 2018: 123), \autocites keeps the works in
+// the order written, (Shor and McCarty 2011; Bonica 2018: 9), consecutive works
+// by one author share the name, (Barber 2016, 2022: 5), and the bibliography reads
 //   Bonica, Adam. 2018. “Title.” Journal 62(4): 830–848.
 const BIBLATEX = [
 	'\\usepackage{csquotes}',
-	'\\usepackage[backend=biber, style=ext-authoryear, maxcitenames=2, uniquename=false, uniquelist=false, dashed=false, sortcites=false]{biblatex}',
+	'\\usepackage[backend=biber, style=ext-authoryear-comp, maxcitenames=2, uniquename=false, uniquelist=false, dashed=false, sortcites=false]{biblatex}',
 	'\\addbibresource{refs.bib}',
-	'% In-text: comma between name and year, colon before the page, no "p."',
-	'\\DeclareDelimFormat{nameyeardelim}{\\addcomma\\space}',
+	'% In-text: a space between name and year, colon before the page, no "p."',
+	'\\DeclareDelimFormat{nameyeardelim}{\\space}',
 	'\\DeclareDelimFormat{postnotedelim}{\\addcolon\\space}',
 	'\\DeclareFieldFormat{postnote}{#1}',
 	'\\DeclareFieldFormat{multipostnote}{#1}',

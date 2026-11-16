@@ -390,10 +390,10 @@ function unmatchedBlock(hide) {
 }
 var BIBLATEX = [
   "\\usepackage{csquotes}",
-  "\\usepackage[backend=biber, style=ext-authoryear, maxcitenames=2, uniquename=false, uniquelist=false, dashed=false, sortcites=false]{biblatex}",
+  "\\usepackage[backend=biber, style=ext-authoryear-comp, maxcitenames=2, uniquename=false, uniquelist=false, dashed=false, sortcites=false]{biblatex}",
   "\\addbibresource{refs.bib}",
-  '% In-text: comma between name and year, colon before the page, no "p."',
-  "\\DeclareDelimFormat{nameyeardelim}{\\addcomma\\space}",
+  '% In-text: a space between name and year, colon before the page, no "p."',
+  "\\DeclareDelimFormat{nameyeardelim}{\\space}",
   "\\DeclareDelimFormat{postnotedelim}{\\addcolon\\space}",
   "\\DeclareFieldFormat{postnote}{#1}",
   "\\DeclareFieldFormat{multipostnote}{#1}",
@@ -571,8 +571,13 @@ function discoverSources(notePath, citeSourcesRaw, notes, folderExists) {
 
 // src/core/citations.ts
 var MAX_PARENTHETICAL = 120;
-var MULTI_WORK_MESSAGE = "every part of a multi-work citation must be (Author, Year)";
-var CITATION_RE = /^(\p{Lu}[^();]*?,\s*\d{4}[a-z]?)(?:\s*:\s*([^()]*?))?$/u;
+var MULTI_WORK_MESSAGE = "every part of a multi-work citation must be (Author Year)";
+var OLD_FORMAT_MESSAGE = "no comma before the year: write (Author Year), as in (Barber 2016)";
+var YEAR = "(?:1[5-9]|20)\\d{2}[a-z]?";
+var YEAR_AHEAD = `(?=\\s*(?:[:,]|$))`;
+var PART_RE = new RegExp(`^(\\p{Lu}[^();]*?)\\s+(${YEAR}${YEAR_AHEAD}.*)$`, "u");
+var WORK_SPLIT_RE = new RegExp(`\\s*,\\s*(?=${YEAR}${YEAR_AHEAD})`, "u");
+var WORK_RE = new RegExp(`^(${YEAR})(?:\\s*:\\s*([^()]*?))?$`, "u");
 var PARENTHETICAL_RE = /\(([^()\n]*)\)/g;
 var PROTECTED_RE = new RegExp(
   [
@@ -591,24 +596,34 @@ var PROTECTED_RE = new RegExp(
   ].join("|"),
   "g"
 );
-function parseCitation(text2) {
-  var _a, _b;
-  const m = CITATION_RE.exec(text2);
-  return m ? { citeshort: (_a = m[1]) != null ? _a : "", locator: ((_b = m[2]) != null ? _b : "").trim() } : null;
+function parsePart(text2) {
+  var _a, _b, _c, _d;
+  const m = PART_RE.exec(text2);
+  if (!m) return null;
+  const author = ((_a = m[1]) != null ? _a : "").trim();
+  const works = [];
+  for (const w of ((_b = m[2]) != null ? _b : "").split(WORK_SPLIT_RE)) {
+    const wm = WORK_RE.exec(w.trim());
+    if (!wm) return null;
+    works.push({ citeshort: `${author.replace(/\s*,$/, "")} ${(_c = wm[1]) != null ? _c : ""}`, locator: ((_d = wm[2]) != null ? _d : "").trim() });
+  }
+  return { works, old: author.endsWith(",") };
 }
 function classifyParenthetical(inner) {
   if (inner.length > MAX_PARENTHETICAL) return { kind: "not-citation" };
-  const content = inner.trim();
-  if (content.includes(";")) {
-    const texts = content.split(";").map((p) => p.trim()).filter((p) => p !== "");
-    const parsed = texts.map(parseCitation);
-    const parts = parsed.filter((p) => p !== null);
-    if (parts.length === 0) return { kind: "not-citation" };
-    if (parts.length < texts.length) return { kind: "multi-work", bad: texts.filter((_, i) => parsed[i] === null) };
-    return parts.length === 1 ? { kind: "citation", ...parts[0] } : { kind: "multi", parts };
-  }
-  const part = parseCitation(content);
-  return part ? { kind: "citation", ...part } : { kind: "not-citation" };
+  const texts = inner.split(";").map((p) => p.trim()).filter((p) => p !== "");
+  const parsed = texts.map(parsePart);
+  if (parsed.every((p) => p === null)) return { kind: "not-citation" };
+  if (parsed.some((p) => p === null)) return { kind: "multi-work", bad: texts.filter((_, i) => parsed[i] === null) };
+  if (parsed.some((p) => p == null ? void 0 : p.old)) return { kind: "old-format", bad: texts.filter((_, i) => {
+    var _a;
+    return (_a = parsed[i]) == null ? void 0 : _a.old;
+  }) };
+  const parts = parsed.flatMap((p) => {
+    var _a;
+    return (_a = p == null ? void 0 : p.works) != null ? _a : [];
+  });
+  return parts.length === 1 ? { kind: "citation", ...parts[0] } : { kind: "multi", parts };
 }
 function splitProtected(line, inMath) {
   const segments = [];
@@ -652,6 +667,11 @@ function replaceCitations(markdown, index) {
     var _a;
     const c = classifyParenthetical(inner);
     if (c.kind === "not-citation") return whole;
+    if (c.kind === "old-format") {
+      const named = c.bad.map((b) => `"${b}"`).join(", ");
+      unmatched.push({ text: whole, reason: "old-format", message: `${OLD_FORMAT_MESSAGE}; found: ${named}` });
+      return rawLatex(unmatchedCommand(whole));
+    }
     if (c.kind === "multi-work") {
       const named = c.bad.map((b) => `"${b}"`).join(", ");
       unmatched.push({ text: whole, reason: "multi-work", message: `${MULTI_WORK_MESSAGE}; not a citation: ${named}` });

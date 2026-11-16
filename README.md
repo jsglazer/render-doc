@@ -2,12 +2,12 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/jsglazer/render-doc?logo=github)](https://github.com/jsglazer/render-doc/releases) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/jsglazer/render-doc/blob/main/LICENSE) [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97756?logo=anthropic)](https://claude.ai)
 
-Render the current Obsidian note as a finished academic paper: typeset with LaTeX through your own preamble, with a cover page, every short citation such as `(Bonica, 2018: 123)` turned into a real biblatex citation, and a bibliography pulled from Zotero. Each render goes into a new folder of its own.
+Render the current Obsidian note as a finished academic paper: typeset with LaTeX through your own preamble, with a cover page, every short citation such as `(Bonica 2018: 123)` turned into a real biblatex citation, and a bibliography pulled from Zotero. Each render goes into a new folder of its own.
 
 ## What it does
 
 - **One command, Render current note.** It opens a dialog, then exports the active note to a new folder holding `<Note>.pdf`, the standalone `<Note>.tex`, `refs.bib`, and a `media/` folder for embedded images. The `.tex` file recompiles as-is inside that folder.
-- **Short citations as plain text.** Write `(Bonica, 2018)` or `(Bonica, 2018: 123)` in the body. On render, each one is matched against the `citeshort:` frontmatter of your source notes (notes with a `citekey:` and a `citeshort:`) and becomes `\autocite{citekey}` or `\autocite[123]{citekey}`. The PDF prints exactly `(Bonica, 2018: 123)`: a comma between name and year, a colon before the page, and no "p.".
+- **Short citations as plain text.** Write `(Bonica 2018)` or `(Bonica 2018: 123)` in the body. On render, each one is matched against the `citeshort:` frontmatter of your source notes (notes with a `citekey:` and a `citeshort:`) and becomes `\autocite{citekey}` or `\autocite[123]{citekey}`. The PDF prints exactly `(Bonica 2018: 123)`: a space between name and year (no comma), a colon before the page, and no "p.".
 - **APSA-style bibliography.** References are typeset with biblatex and biber (`ext-authoryear`, configured toward APSA) and list only the works the paper cites: `Bonica, Adam. 2018. “Title.” Journal 62(4): 830–848.`
 - **Unmatched citations stay visible.** A parenthetical that looks like a citation but matches no source note, or matches two different citekeys is left in the text with a yellow highlight, and listed as a warning in the dialog. Turn on **Hide citation alerts** in the dialog to print them as plain text instead, without the highlight (they are still listed as warnings). That switch starts off every time the dialog opens and works in Dev and Submit.
 - **Dev and Submit versions.** The dialog's **Version** selector picks one of two preambles. **Dev** is the working draft, with no title page: the title and author in the header, page x of y bottom left, and a date/time stamp bottom right. **Submit** is the copy you hand in: a cover page, then the short title in bold top left, the author top right, page x of y centred, and no stamp. The dialog title sits in an alert box (yellow for Dev, red for Submit), so a draft is hard to mistake for the final copy. Your choice is remembered.
@@ -71,11 +71,13 @@ Render the current Obsidian note as a finished academic paper: typeset with LaTe
 
 ### Citation rules
 
-- A citation is one parenthetical with no nested parentheses, at most 120 characters, starting with an uppercase letter, then `, YYYY` (optionally with a letter, as in `2018a`), then optionally `: locator`.
+- A citation is one parenthetical with no nested parentheses, at most 120 characters, starting with an uppercase letter: author text, a space, then a year (optionally with a letter, as in `2018a`), then optionally `: locator`.
+- Write no comma before the year. The old form `(Bonica, 2018)` is highlighted and listed as a warning that says to drop the comma.
+- Several works by the same author share one name, with the years separated by `, ` and an optional locator on each: `(Barber 2016, 2022)` or `(Barber 2016: 12, 2022: 5)`. A comma followed by a year starts the next work; any other comma stays in the locator, so `(Tsai 2007: 356, 358)` is one work.
 - Text that starts lowercase, such as `(see Section 2, 2024)`, is never treated as a citation.
-- Matching is exact once leading and trailing spaces are trimmed, runs of spaces are collapsed and Unicode is normalized. `Shor & McCarty, 2011` does not match `Shor and McCarty, 2011`.
+- Matching is exact once leading and trailing spaces are trimmed, runs of spaces are collapsed and Unicode is normalized. `Shor & McCarty 2011` does not match `Shor and McCarty 2011`.
 - Citations are never read inside code, math (`$…$`, `$$…$$`) or Markdown links.
-- Several works in one parenthetical are separated by `;`, each with its own optional locator, as in `(Shor and McCarty, 2011; Bonica, 2018: 123)`. Each part is matched on its own, and the whole becomes one `\autocites` that prints the works in the order written. If any part matches no source note, matches two citekeys, or isn't an `Author, Year` citation, the whole parenthetical is highlighted and the warning names each failing part.
+- Several works in one parenthetical are separated by `;`, each with its own optional locator, as in `(Shor and McCarty 2011; Bonica 2018: 123)`, and the two forms combine: `(Barber 2016, 2022; Bonica 2014, 2018; Duca 2017)`. Each work is matched on its own, and the whole becomes one `\autocites` that prints the works in the order written, giving one name to consecutive works by the same author. If any part matches no source note, matches two citekeys, or isn't an `Author Year` citation, the whole parenthetical is highlighted and the warning names each failing part.
 - If a cited key isn't in Zotero, or Zotero isn't running, nothing is rendered and a notice lists the missing keys.
 
 ## How it works

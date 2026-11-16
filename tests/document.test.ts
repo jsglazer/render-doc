@@ -169,8 +169,8 @@ describe('latex', () => {
 		expect(citeHeader(false)).not.toContain('biblatex');
 		expect(citeHeader(false)).not.toContain('colorbox');
 		const withBib = citeHeader(true);
-		expect(withBib).toContain('style=ext-authoryear');
-		expect(withBib).toContain('\\DeclareDelimFormat{nameyeardelim}{\\addcomma\\space}');
+		expect(withBib).toContain('style=ext-authoryear-comp');
+		expect(withBib).toContain('\\DeclareDelimFormat{nameyeardelim}{\\space}');
 		expect(withBib).toContain('\\DeclareDelimFormat{postnotedelim}{\\addcolon\\space}');
 		expect(withBib).toContain('\\DeclareFieldFormat{postnote}{#1}');
 	});
@@ -273,13 +273,13 @@ describe('extractBody', () => {
 describe('prepareDocument + buildFiles', () => {
 	const resolver: ExportResolver = {
 		resolveLink: (link) => (link === 'fig.png' ? { path: 'img/fig.png', kind: 'image' } : link === 'Other' ? { path: 'Other.md', kind: 'markdown' } : null),
-		readNote: () => Promise.resolve('---\ncitekey: x\n---\nEmbedded (Bonica, 2018: 5).'),
+		readNote: () => Promise.resolve('---\ncitekey: x\n---\nEmbedded (Bonica 2018: 5).'),
 		stageImage: () => 'assets/1-fig.png',
 	};
-	const index = new Map<string, CitationEntry[]>([['Bonica, 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
+	const index = new Map<string, CitationEntry[]>([['Bonica 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
 
 	it('converts Obsidian syntax, then resolves citations, including in embeds', async () => {
-		const doc = ['---', 'title: T', '---', '@ Outline', 'See [[Other|the other note]] (Bonica, 2018).', '', '![[fig.png|300]]', '', '![[Other]]', '%%hidden (Jones, 2015)%%'].join('\n');
+		const doc = ['---', 'title: T', '---', '@ Outline', 'See [[Other|the other note]] (Bonica 2018).', '', '![[fig.png|300]]', '', '![[Other]]', '%%hidden (Jones 2015)%%'].join('\n');
 		const p = await prepareDocument(doc, 'Paper.md', '@', resolver, index);
 		expect(p.markdown).toBe(
 			['See the other note `\\autocite{Bonica-2018}`{=latex}.', '', '![](assets/1-fig.png){width=300px}', '', 'Embedded `\\autocite[5]{Bonica-2018}`{=latex}.'].join('\n'),
@@ -290,11 +290,11 @@ describe('prepareDocument + buildFiles', () => {
 
 	it('includes biblatex, refs.bib and the bibliography only when the note cites', async () => {
 		const target = { resourcePath: '/v', parentDir: '/out', folderName: 'Paper', stem: 'Paper', overwrite: false };
-		const cited = buildFiles(await prepareDocument('(Bonica, 2018)', 'P.md', '@', resolver, index), readDocMeta({}, 'P'), target);
+		const cited = buildFiles(await prepareDocument('(Bonica 2018)', 'P.md', '@', resolver, index), readDocMeta({}, 'P'), target);
 		expect(cited.job).toMatchObject({ bibliography: 'refs.bib', after: 'after.tex', headers: ['meta.tex', 'preamble.tex', 'cite.tex'] });
 		expect(cited.files['after.tex']).toBe('\\clearpage\n\\printbibliography[heading=rdreferences, title={References}]\n');
 
-		const plain = buildFiles(await prepareDocument('No cites (Jones, 2015).', 'P.md', '@', resolver, index), readDocMeta({}, 'P'), target);
+		const plain = buildFiles(await prepareDocument('No cites (Jones 2015).', 'P.md', '@', resolver, index), readDocMeta({}, 'P'), target);
 		expect(plain.job).toMatchObject({ bibliography: '', after: '' });
 		expect(plain.files['after.tex']).toBeUndefined();
 		expect(plain.files['cite.tex']).not.toContain('biblatex');

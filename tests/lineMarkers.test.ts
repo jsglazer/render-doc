@@ -47,10 +47,10 @@ describe('prepareDocument line numbers', () => {
 		readNote: () => Promise.resolve('Embedded text.'),
 		stageImage: () => 'assets/1-x.png',
 	};
-	const index = new Map<string, CitationEntry[]>([['Bonica, 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
+	const index = new Map<string, CitationEntry[]>([['Bonica 2018', [{ citekey: 'Bonica-2018', path: 'S/b.md' }]]]);
 
 	it('numbers the surviving lines with their Obsidian line numbers, citations intact', async () => {
-		const doc = ['---', 'title: T', '---', '@ Outline', '(Bonica, 2018) starts this.', '### Heading', '', '![[Other]]', '', 'Last.'].join('\n');
+		const doc = ['---', 'title: T', '---', '@ Outline', '(Bonica 2018) starts this.', '### Heading', '', '![[Other]]', '', 'Last.'].join('\n');
 		const p = await prepareDocument(doc, 'P.md', '@', resolver, index);
 		expect(p.markdown).toBe(['`\\autocite{Bonica-2018}`{=latex} starts this.', '', '### Heading', '', 'Embedded text.', '', 'Last.'].join('\n'));
 		expect(p.numberedMarkdown).toBe(

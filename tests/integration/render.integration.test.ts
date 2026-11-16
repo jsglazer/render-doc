@@ -59,9 +59,9 @@ const NOTE = [
 	'date: 2026-10-28',
 	'---',
 	'@ Outline entry that must not appear',
-	'Campaign money predicts roll-call ideology (Bonica, 2018: 123), and state legislatures polarize (Shor and McCarty, 2011; Bonica, 2018: 9).',
+	'Campaign money predicts roll-call ideology (Bonica 2018: 123), and state legislatures polarize (Shor and McCarty 2011; Bonica 2018: 9).',
 	'',
-	'An uncited claim (Jones, 2015) stays highlighted, as does prose about code like `(Bonica, 2018)`.',
+	'An uncited claim (Jones 2015) stays highlighted, as does prose about code like `(Bonica 2018)`.',
 	'### State-level data',
 	'A heading typed right under a text line, as Obsidian allows.',
 	'',
@@ -104,8 +104,8 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 			'Classes/Polarization/Paper.md',
 			undefined,
 			[
-				{ path: 'Classes/Sources/Bonica.md', frontmatter: { citekey: 'Bonica-InferringRollCallScores-2018', citeshort: 'Bonica, 2018' } },
-				{ path: 'Classes/Sources/Shor.md', frontmatter: { citekey: 'ShorMcCarty-IdeologicalMappingAmerican-2011', citeshort: 'Shor and McCarty, 2011' } },
+				{ path: 'Classes/Sources/Bonica.md', frontmatter: { citekey: 'Bonica-InferringRollCallScores-2018', citeshort: 'Bonica 2018' } },
+				{ path: 'Classes/Sources/Shor.md', frontmatter: { citekey: 'ShorMcCarty-IdeologicalMappingAmerican-2011', citeshort: 'Shor and McCarty 2011' } },
 			],
 			() => true,
 		);
@@ -163,9 +163,9 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 
 	it('renders the APSA-style citation, the highlight and the bibliography', () => {
 		const text = pdfText(join(parentDir, 'Paper', 'Paper.pdf')).replace(/\s+/g, ' ');
-		expect(text).toContain('(Bonica, 2018: 123)');
-		expect(text).toContain('(Shor and McCarty, 2011; Bonica, 2018: 9)');
-		expect(text).toContain('(Jones, 2015)');
+		expect(text).toContain('(Bonica 2018: 123)');
+		expect(text).toContain('(Shor and McCarty 2011; Bonica 2018: 9)');
+		expect(text).toContain('(Jones 2015)');
 		expect(text).toContain('Polarization & Money');
 		expect(text).toContain('References');
 		expect(text).toContain('Joshua S. Glazer');
@@ -174,7 +174,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(text).toContain('Shor, Boris, and Nolan McCarty. 2011.');
 		expect(text).not.toContain('Outline entry');
 		expect(text).not.toContain('###');
-		expect(text).toMatch(/highlighted, as does prose about code like \(Bonica, 2018\)\. \S*\s*(?:13\s+)?State-level data (?:14\s+)?A heading/);
+		expect(text).toMatch(/highlighted, as does prose about code like \(Bonica 2018\)\. \S*\s*(?:13\s+)?State-level data (?:14\s+)?A heading/);
 		expect(text).not.toMatch(/p\. ?123/);
 	});
 
@@ -182,7 +182,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		const tex = readFileSync(join(parentDir, 'Paper', 'Paper.tex'), 'utf8');
 		expect(tex).toContain('\\autocite[123]{Bonica-InferringRollCallScores-2018}');
 		expect(tex).toContain('\\autocites{ShorMcCarty-IdeologicalMappingAmerican-2011}[9]{Bonica-InferringRollCallScores-2018}');
-		expect(tex).toContain('\\rdunmatched{(Jones, 2015)}');
+		expect(tex).toContain('\\rdunmatched{(Jones 2015)}');
 		expect(tex).toContain('\\addbibresource{refs.bib}');
 		expect(tex).toContain('\\fancyhead[R]{\\small{\\DocAuthor}}');
 		expect(tex).toContain('\\def\\DocAuthor{Joshua S. Glazer}');
@@ -210,7 +210,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		const biber = execFileSync('/bin/zsh', ['-c', `LOG=/dev/null; source ${JSON.stringify(join(ROOT, 'renderer', 'lib.sh'))}; resolve_biber`], { encoding: 'utf8', env }).trim();
 		writeFileSync(join(copy, 'rc'), `$biber = q{"${biber}" %O %S};\n`);
 		execFileSync('latexmk', ['-lualatex', '-interaction=nonstopmode', '-halt-on-error', '-r', 'rc', 'Paper.tex'], { cwd: copy, env, stdio: 'ignore', timeout: 240_000 });
-		expect(pdfText(join(copy, 'Paper.pdf')).replace(/\s+/g, ' ')).toContain('(Bonica, 2018: 123)');
+		expect(pdfText(join(copy, 'Paper.pdf')).replace(/\s+/g, ' ')).toContain('(Bonica 2018: 123)');
 	}, 300_000);
 
 	it('Dev with line numbers: no title page; text from page 1 with Obsidian line numbers, then References on a page of its own with the stamp', () => {
@@ -308,7 +308,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 		expect(JSON.parse(out.trim().split('\n').pop() ?? '{}')).toMatchObject({ ok: true, output: folder });
 		expect(listTree(folder)).toEqual(['Paper.pdf', 'Paper.tex', 'media/', 'media/assets/', 'media/assets/1-fig.png', 'notes.txt', 'refs.bib']);
 		expect(readFileSync(join(folder, 'notes.txt'), 'utf8')).toBe('mine');
-		expect(pdfText(join(folder, 'Paper.pdf'))).toContain('(Bonica, 2018: 123)');
+		expect(pdfText(join(folder, 'Paper.pdf'))).toContain('(Bonica 2018: 123)');
 	});
 });
 
@@ -317,7 +317,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 // off and on. pdftotext separates pages with a form feed.
 describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => {
 	let tmp = '';
-	const NOTE_BREAKS = ['---', 'title: Breaks', '---', '# Opening', ...Array.from({ length: 16 }, (_, i) => `Sentence ${i + 1}.`), '# Later Section', 'Final words with an unmatched cite (Jones, 2015).'].join('\n');
+	const NOTE_BREAKS = ['---', 'title: Breaks', '---', '# Opening', ...Array.from({ length: 16 }, (_, i) => `Sentence ${i + 1}.`), '# Later Section', 'Final words with an unmatched cite (Jones 2015).'].join('\n');
 	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
 
 	async function render(name: string, pageBreaks: boolean, hideUnmatched = false, fontSize: FontSize = 12): Promise<string[]> {
@@ -362,11 +362,11 @@ describe.skipIf(!ready)('page breaks before # headings (real toolchain)', () => 
 
 	it('prints an unmatched citation unshaded when citation alerts are hidden', async () => {
 		const pages = await render('hidden', false, true);
-		expect(pages.join('')).toContain('(Jones, 2015)');
+		expect(pages.join('')).toContain('(Jones 2015)');
 		const tex = readFileSync(join(tmp, 'out-hidden', 'Breaks', 'Breaks.tex'), 'utf8');
 		expect(tex).toContain('\\newcommand{\\rdunmatched}[1]{#1}');
 		expect(tex).not.toContain('\\highLight[yellow!40]');
-		expect(tex).toContain('\\rdunmatched{(Jones, 2015)}');
+		expect(tex).toContain('\\rdunmatched{(Jones 2015)}');
 	}, 300_000);
 
 	it('typesets at the chosen font size, using extarticle for sizes article lacks', async () => {
@@ -466,7 +466,7 @@ describe.skipIf(!ready)('tags (real toolchain)', () => {
 // the page it prints on and its Obsidian line number, after the References.
 describe.skipIf(!ready)('tag table (real toolchain)', () => {
 	let tmp = '';
-	const NOTE_TAG_TABLE = ['---', 'title: Tag Table', '---', 'First page text #alpha here.', '', '# Second Section', ...Array.from({ length: 16 }, (_, i) => `Filler ${i + 1}.`), '# Later #beta', 'Closing line with #gamma and a cite (Bonica, 2018).'].join('\n');
+	const NOTE_TAG_TABLE = ['---', 'title: Tag Table', '---', 'First page text #alpha here.', '', '# Second Section', ...Array.from({ length: 16 }, (_, i) => `Filler ${i + 1}.`), '# Later #beta', 'Closing line with #gamma and a cite (Bonica 2018).'].join('\n');
 	const resolver: ExportResolver = { resolveLink: () => null, readNote: () => Promise.resolve(''), stageImage: () => '' };
 
 	beforeAll(() => {
@@ -483,7 +483,7 @@ describe.skipIf(!ready)('tag table (real toolchain)', () => {
 		const parentDir = join(tmp, 'out');
 		mkdirSync(join(buildDir, 'assets'), { recursive: true });
 		mkdirSync(parentDir);
-		const index = new Map([['Bonica, 2018', [{ citekey: 'Bonica-InferringRollCallScores-2018', path: 'S/b.md' }]]]);
+		const index = new Map([['Bonica 2018', [{ citekey: 'Bonica-InferringRollCallScores-2018', path: 'S/b.md' }]]]);
 		const prepared = await prepareDocument(NOTE_TAG_TABLE, 'TagTable.md', '@', resolver, index);
 		const { files, job } = buildFiles(
 			prepared,
