@@ -6,7 +6,9 @@
 //   matched         → `\autocite[123]{Bonica-InferringRollCallScores-2018}`{=latex}
 //   no match        → `\rdunmatched{(Bonica, 2018: 123)}`{=latex} + warning
 //   ambiguous       → highlighted the same way + warning naming the citekeys
-//   multi-work (;)  → highlighted the same way + "multi-work citations not supported"
+//   multi-work (;)  → `(Hall, 2014: 12; Barber, 2016)` → `\autocites[12]{Hall-…}{Barber-…}`
+//                     when every part matches; otherwise the whole parenthetical
+//                     is highlighted and the warning names the part(s) that failed
 //
 // Citation-like (Developer Decision "Citation-like grammar"): one parenthetical
 // with no nested parentheses, at most 120 characters inside, whose content is
@@ -18,12 +20,12 @@
 // blocks spanning lines), Markdown links and images, and autolinks.
 
 import { isFenceLine, nextFenceState } from './exportBody';
-import { autociteCommand, rawLatex, unmatchedCommand } from './latex';
+import { autociteCommand, autocitesCommand, rawLatex, unmatchedCommand } from './latex';
 import type { CiteIndex } from './sources';
 import { distinctCitekeys, normalizeCiteshort } from './sources';
 
 export const MAX_PARENTHETICAL = 120;
-export const MULTI_WORK_MESSAGE = 'multi-work citations not supported';
+export const MULTI_WORK_MESSAGE = 'every part of a multi-work citation must be (Author, Year)';
 
 // Author text (uppercase-led, no parentheses or semicolons), `, YYYY[a-z]`,
 // then an optional `: locator`.
@@ -65,22 +67,36 @@ export interface CitationResult {
 	citekeys: string[]; // distinct, in first-cited order
 }
 
+export interface CitationPart {
+	citeshort: string;
+	locator: string;
+}
+
 export type Classification =
 	| { kind: 'not-citation' }
 	| { kind: 'citation'; citeshort: string; locator: string }
-	| { kind: 'multi-work' };
+	| { kind: 'multi'; parts: CitationPart[] }
+	| { kind: 'multi-work'; bad: string[] }; // some `;` parts are citations, some are not
+
+function parseCitation(text: string): CitationPart | null {
+	const m = CITATION_RE.exec(text);
+	return m ? { citeshort: m[1] ?? '', locator: (m[2] ?? '').trim() } : null;
+}
 
 // What a parenthetical's inner text (without the parentheses) is.
 export function classifyParenthetical(inner: string): Classification {
 	if (inner.length > MAX_PARENTHETICAL) return { kind: 'not-citation' };
 	const content = inner.trim();
 	if (content.includes(';')) {
-		const parts = content.split(';').map((p) => p.trim());
-		return parts.some((p) => CITATION_RE.test(p)) ? { kind: 'multi-work' } : { kind: 'not-citation' };
+		const texts = content.split(';').map((p) => p.trim()).filter((p) => p !== '');
+		const parsed = texts.map(parseCitation);
+		const parts = parsed.filter((p): p is CitationPart => p !== null);
+		if (parts.length === 0) return { kind: 'not-citation' };
+		if (parts.length < texts.length) return { kind: 'multi-work', bad: texts.filter((_, i) => parsed[i] === null) };
+		return parts.length === 1 ? { kind: 'citation', ...(parts[0] as CitationPart) } : { kind: 'multi', parts };
 	}
-	const m = CITATION_RE.exec(content);
-	if (!m) return { kind: 'not-citation' };
-	return { kind: 'citation', citeshort: m[1] ?? '', locator: (m[2] ?? '').trim() };
+	const part = parseCitation(content);
+	return part ? { kind: 'citation', ...part } : { kind: 'not-citation' };
 }
 
 interface Segment {
@@ -123,27 +139,41 @@ export function replaceCitations(markdown: string, index: CiteIndex): CitationRe
 	const unmatched: UnmatchedCitation[] = [];
 	const citekeys: string[] = [];
 
+	// The one citekey for a citeshort, or why there isn't one.
+	const lookup = (citeshort: string): { citekey: string } | { reason: UnmatchedReason; message: string } => {
+		const key = normalizeCiteshort(citeshort);
+		const keys = distinctCitekeys(index.get(key) ?? []);
+		if (keys.length === 0) return { reason: 'no-match', message: `no source note has citeshort "${key}"` };
+		if (keys.length > 1) return { reason: 'ambiguous', message: `"${key}" is the citeshort of ${keys.join(', ')}` };
+		return { citekey: keys[0] ?? '' };
+	};
+
 	const rewrite = (whole: string, inner: string): string => {
 		const c = classifyParenthetical(inner);
 		if (c.kind === 'not-citation') return whole;
 		if (c.kind === 'multi-work') {
-			unmatched.push({ text: whole, reason: 'multi-work', message: MULTI_WORK_MESSAGE });
+			const named = c.bad.map((b) => `"${b}"`).join(', ');
+			unmatched.push({ text: whole, reason: 'multi-work', message: `${MULTI_WORK_MESSAGE}; not a citation: ${named}` });
 			return rawLatex(unmatchedCommand(whole));
 		}
-		const key = normalizeCiteshort(c.citeshort);
-		const keys = distinctCitekeys(index.get(key) ?? []);
-		if (keys.length === 0) {
-			unmatched.push({ text: whole, reason: 'no-match', message: `no source note has citeshort "${key}"` });
+		const parts = c.kind === 'multi' ? c.parts : [{ citeshort: c.citeshort, locator: c.locator }];
+		const found = parts.map((p) => ({ part: p, hit: lookup(p.citeshort) }));
+		const failed = found.filter((f) => !('citekey' in f.hit));
+		if (failed.length > 0) {
+			// Single citation: the lookup's own reason. Multi: the first failure's
+			// reason, with every failing part's message.
+			const first = failed[0]?.hit as { reason: UnmatchedReason; message: string };
+			const message = failed.map((f) => (f.hit as { message: string }).message).join('; ');
+			unmatched.push({ text: whole, reason: first.reason, message });
 			return rawLatex(unmatchedCommand(whole));
 		}
-		if (keys.length > 1) {
-			unmatched.push({ text: whole, reason: 'ambiguous', message: `"${key}" is the citeshort of ${keys.join(', ')}` });
-			return rawLatex(unmatchedCommand(whole));
+		const cites = found.map((f) => ({ citekey: (f.hit as { citekey: string }).citekey, locator: f.part.locator }));
+		for (const cite of cites) {
+			resolved.push({ text: whole, ...cite });
+			if (!citekeys.includes(cite.citekey)) citekeys.push(cite.citekey);
 		}
-		const citekey = keys[0] ?? '';
-		resolved.push({ text: whole, citekey, locator: c.locator });
-		if (!citekeys.includes(citekey)) citekeys.push(citekey);
-		return rawLatex(autociteCommand(citekey, c.locator));
+		const only = cites[0];
+		return rawLatex(cites.length === 1 && only ? autociteCommand(only.citekey, only.locator) : autocitesCommand(cites));
 	};
 
 	const out: string[] = [];

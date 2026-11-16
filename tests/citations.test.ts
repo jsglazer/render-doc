@@ -43,8 +43,16 @@ describe('classifyParenthetical', () => {
 		expect(classifyParenthetical(`${'A'.repeat(115)}, 2018`)).toEqual({ kind: 'not-citation' });
 	});
 
-	it('flags multi-work parentheticals', () => {
-		expect(classifyParenthetical('Bonica, 2018; Shor and McCarty, 2011')).toEqual({ kind: 'multi-work' });
+	it('splits multi-work parentheticals into parts', () => {
+		expect(classifyParenthetical('Bonica, 2018; Shor and McCarty, 2011: 5')).toEqual({
+			kind: 'multi',
+			parts: [
+				{ citeshort: 'Bonica, 2018', locator: '' },
+				{ citeshort: 'Shor and McCarty, 2011', locator: '5' },
+			],
+		});
+		expect(classifyParenthetical('Bonica, 2018;')).toEqual({ kind: 'citation', citeshort: 'Bonica, 2018', locator: '' });
+		expect(classifyParenthetical('Bonica, 2018; see also Table 2')).toEqual({ kind: 'multi-work', bad: ['see also Table 2'] });
 		expect(classifyParenthetical('a; b')).toEqual({ kind: 'not-citation' });
 	});
 });
@@ -94,10 +102,30 @@ describe('replaceCitations', () => {
 		expect(run('(Dup, 2019)').citekeys).toEqual(['Dup-2019']);
 	});
 
-	it('highlights multi-work citations with the fixed warning', () => {
-		const r = run('(Bonica, 2018; Shor and McCarty, 2011)');
-		expect(r.markdown).toBe('`\\rdunmatched{(Bonica, 2018; Shor and McCarty, 2011)}`{=latex}');
-		expect(r.unmatched[0]).toMatchObject({ reason: 'multi-work', message: MULTI_WORK_MESSAGE });
+	it('replaces a multi-work citation with one \\autocites, in written order, locators per part', () => {
+		const r = run('(Shor and McCarty, 2011; Bonica, 2018: 12)');
+		expect(r.markdown).toBe('`\\autocites{ShorMcCarty-2011}[12]{Bonica-InferringRollCallScores-2018}`{=latex}');
+		expect(r.resolved.map((c) => [c.citekey, c.locator])).toEqual([
+			['ShorMcCarty-2011', ''],
+			['Bonica-InferringRollCallScores-2018', '12'],
+		]);
+		expect(r.citekeys).toEqual(['ShorMcCarty-2011', 'Bonica-InferringRollCallScores-2018']);
+		expect(r.unmatched).toEqual([]);
+	});
+
+	it('highlights a multi-work citation when any part fails, naming each failure', () => {
+		const r = run('(Bonica, 2018; Jones, 2015; Smith, 2020)');
+		expect(r.markdown).toBe('`\\rdunmatched{(Bonica, 2018; Jones, 2015; Smith, 2020)}`{=latex}');
+		expect(r.unmatched).toHaveLength(1);
+		expect(r.unmatched[0]?.reason).toBe('no-match');
+		expect(r.unmatched[0]?.message).toBe('no source note has citeshort "Jones, 2015"; "Smith, 2020" is the citeshort of Smith-A-2020, Smith-B-2020');
+		expect(r.citekeys).toEqual([]);
+	});
+
+	it('highlights a mixed parenthetical whose other parts are not citations', () => {
+		const r = run('(Bonica, 2018; see Table 2)');
+		expect(r.markdown).toBe('`\\rdunmatched{(Bonica, 2018; see Table 2)}`{=latex}');
+		expect(r.unmatched[0]).toMatchObject({ reason: 'multi-work', message: `${MULTI_WORK_MESSAGE}; not a citation: "see Table 2"` });
 	});
 
 	it('escapes special characters inside highlighted text', () => {

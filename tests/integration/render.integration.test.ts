@@ -59,7 +59,7 @@ const NOTE = [
 	'date: 2026-10-28',
 	'---',
 	'@ Outline entry that must not appear',
-	'Campaign money predicts roll-call ideology (Bonica, 2018: 123), and state legislatures polarize (Shor and McCarty, 2011).',
+	'Campaign money predicts roll-call ideology (Bonica, 2018: 123), and state legislatures polarize (Shor and McCarty, 2011; Bonica, 2018: 9).',
 	'',
 	'An uncited claim (Jones, 2015) stays highlighted, as does prose about code like `(Bonica, 2018)`.',
 	'### State-level data',
@@ -164,7 +164,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 	it('renders the APSA-style citation, the highlight and the bibliography', () => {
 		const text = pdfText(join(parentDir, 'Paper', 'Paper.pdf')).replace(/\s+/g, ' ');
 		expect(text).toContain('(Bonica, 2018: 123)');
-		expect(text).toContain('(Shor and McCarty, 2011)');
+		expect(text).toContain('(Shor and McCarty, 2011; Bonica, 2018: 9)');
 		expect(text).toContain('(Jones, 2015)');
 		expect(text).toContain('Polarization & Money');
 		expect(text).toContain('References');
@@ -181,6 +181,7 @@ describe.skipIf(!ready)('render-pdf.sh (real toolchain)', () => {
 	it('writes a standalone .tex with relative refs.bib and media paths', () => {
 		const tex = readFileSync(join(parentDir, 'Paper', 'Paper.tex'), 'utf8');
 		expect(tex).toContain('\\autocite[123]{Bonica-InferringRollCallScores-2018}');
+		expect(tex).toContain('\\autocites{ShorMcCarty-IdeologicalMappingAmerican-2011}[9]{Bonica-InferringRollCallScores-2018}');
 		expect(tex).toContain('\\rdunmatched{(Jones, 2015)}');
 		expect(tex).toContain('\\addbibresource{refs.bib}');
 		expect(tex).toContain('\\fancyhead[R]{\\small{\\DocAuthor}}');

@@ -331,6 +331,9 @@ function rawLatex(latex) {
 function autociteCommand(citekey, locator) {
   return locator === "" ? `\\autocite{${citekey}}` : `\\autocite[${latexOptionalArg(locator)}]{${citekey}}`;
 }
+function autocitesCommand(cites) {
+  return `\\autocites${cites.map((c) => c.locator === "" ? `{${c.citekey}}` : `[${latexOptionalArg(c.locator)}]{${c.citekey}}`).join("")}`;
+}
 function unmatchedCommand(text2) {
   return `\\rdunmatched{${latexEscape(text2)}}`;
 }
@@ -387,7 +390,7 @@ function unmatchedBlock(hide) {
 }
 var BIBLATEX = [
   "\\usepackage{csquotes}",
-  "\\usepackage[backend=biber, style=ext-authoryear, maxcitenames=2, uniquename=false, uniquelist=false, dashed=false]{biblatex}",
+  "\\usepackage[backend=biber, style=ext-authoryear, maxcitenames=2, uniquename=false, uniquelist=false, dashed=false, sortcites=false]{biblatex}",
   "\\addbibresource{refs.bib}",
   '% In-text: comma between name and year, colon before the page, no "p."',
   "\\DeclareDelimFormat{nameyeardelim}{\\addcomma\\space}",
@@ -568,7 +571,7 @@ function discoverSources(notePath, citeSourcesRaw, notes, folderExists) {
 
 // src/core/citations.ts
 var MAX_PARENTHETICAL = 120;
-var MULTI_WORK_MESSAGE = "multi-work citations not supported";
+var MULTI_WORK_MESSAGE = "every part of a multi-work citation must be (Author, Year)";
 var CITATION_RE = /^(\p{Lu}[^();]*?,\s*\d{4}[a-z]?)(?:\s*:\s*([^()]*?))?$/u;
 var PARENTHETICAL_RE = /\(([^()\n]*)\)/g;
 var PROTECTED_RE = new RegExp(
@@ -588,17 +591,24 @@ var PROTECTED_RE = new RegExp(
   ].join("|"),
   "g"
 );
-function classifyParenthetical(inner) {
+function parseCitation(text2) {
   var _a, _b;
+  const m = CITATION_RE.exec(text2);
+  return m ? { citeshort: (_a = m[1]) != null ? _a : "", locator: ((_b = m[2]) != null ? _b : "").trim() } : null;
+}
+function classifyParenthetical(inner) {
   if (inner.length > MAX_PARENTHETICAL) return { kind: "not-citation" };
   const content = inner.trim();
   if (content.includes(";")) {
-    const parts = content.split(";").map((p) => p.trim());
-    return parts.some((p) => CITATION_RE.test(p)) ? { kind: "multi-work" } : { kind: "not-citation" };
+    const texts = content.split(";").map((p) => p.trim()).filter((p) => p !== "");
+    const parsed = texts.map(parseCitation);
+    const parts = parsed.filter((p) => p !== null);
+    if (parts.length === 0) return { kind: "not-citation" };
+    if (parts.length < texts.length) return { kind: "multi-work", bad: texts.filter((_, i) => parsed[i] === null) };
+    return parts.length === 1 ? { kind: "citation", ...parts[0] } : { kind: "multi", parts };
   }
-  const m = CITATION_RE.exec(content);
-  if (!m) return { kind: "not-citation" };
-  return { kind: "citation", citeshort: (_a = m[1]) != null ? _a : "", locator: ((_b = m[2]) != null ? _b : "").trim() };
+  const part = parseCitation(content);
+  return part ? { kind: "citation", ...part } : { kind: "not-citation" };
 }
 function splitProtected(line, inMath) {
   const segments = [];
@@ -630,28 +640,39 @@ function replaceCitations(markdown, index) {
   const resolved = [];
   const unmatched = [];
   const citekeys = [];
-  const rewrite = (whole, inner) => {
+  const lookup = (citeshort) => {
     var _a, _b;
+    const key = normalizeCiteshort(citeshort);
+    const keys = distinctCitekeys((_a = index.get(key)) != null ? _a : []);
+    if (keys.length === 0) return { reason: "no-match", message: `no source note has citeshort "${key}"` };
+    if (keys.length > 1) return { reason: "ambiguous", message: `"${key}" is the citeshort of ${keys.join(", ")}` };
+    return { citekey: (_b = keys[0]) != null ? _b : "" };
+  };
+  const rewrite = (whole, inner) => {
+    var _a;
     const c = classifyParenthetical(inner);
     if (c.kind === "not-citation") return whole;
     if (c.kind === "multi-work") {
-      unmatched.push({ text: whole, reason: "multi-work", message: MULTI_WORK_MESSAGE });
+      const named = c.bad.map((b) => `"${b}"`).join(", ");
+      unmatched.push({ text: whole, reason: "multi-work", message: `${MULTI_WORK_MESSAGE}; not a citation: ${named}` });
       return rawLatex(unmatchedCommand(whole));
     }
-    const key = normalizeCiteshort(c.citeshort);
-    const keys = distinctCitekeys((_a = index.get(key)) != null ? _a : []);
-    if (keys.length === 0) {
-      unmatched.push({ text: whole, reason: "no-match", message: `no source note has citeshort "${key}"` });
+    const parts = c.kind === "multi" ? c.parts : [{ citeshort: c.citeshort, locator: c.locator }];
+    const found = parts.map((p) => ({ part: p, hit: lookup(p.citeshort) }));
+    const failed = found.filter((f) => !("citekey" in f.hit));
+    if (failed.length > 0) {
+      const first = (_a = failed[0]) == null ? void 0 : _a.hit;
+      const message = failed.map((f) => f.hit.message).join("; ");
+      unmatched.push({ text: whole, reason: first.reason, message });
       return rawLatex(unmatchedCommand(whole));
     }
-    if (keys.length > 1) {
-      unmatched.push({ text: whole, reason: "ambiguous", message: `"${key}" is the citeshort of ${keys.join(", ")}` });
-      return rawLatex(unmatchedCommand(whole));
+    const cites = found.map((f) => ({ citekey: f.hit.citekey, locator: f.part.locator }));
+    for (const cite of cites) {
+      resolved.push({ text: whole, ...cite });
+      if (!citekeys.includes(cite.citekey)) citekeys.push(cite.citekey);
     }
-    const citekey = (_b = keys[0]) != null ? _b : "";
-    resolved.push({ text: whole, citekey, locator: c.locator });
-    if (!citekeys.includes(citekey)) citekeys.push(citekey);
-    return rawLatex(autociteCommand(citekey, c.locator));
+    const only = cites[0];
+    return rawLatex(cites.length === 1 && only ? autociteCommand(only.citekey, only.locator) : autocitesCommand(cites));
   };
   const out = [];
   let fence = null;
