@@ -72,6 +72,7 @@ eval "$ENV_OUT"
 args=(
   -f markdown+mark
   -t latex -s -o doc.tex
+  --wrap=none
   --extract-media=media
   --resource-path="$BUILD:$JOB_RESOURCE_PATH"
   --metadata-file="$JOB_METADATA"
