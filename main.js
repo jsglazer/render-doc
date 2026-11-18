@@ -276,6 +276,14 @@ function safeStem(name) {
   const cleaned = name.replace(/[/\\:]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/^\.+/, "").replace(/[.\s]+$/, "");
   return cleaned === "" ? "Document" : cleaned;
 }
+var DEFAULT_FILE_NAME = "Josh Glazer - {titleshort}";
+function fileStemFor(template, meta, basename) {
+  const vars = { titleshort: meta.shortTitle, titleprint: meta.printTitle, title: meta.title, basename };
+  return safeStem(template.replace(/\{(\w+)\}/g, (whole, key) => {
+    var _a;
+    return (_a = vars[key.toLowerCase()]) != null ? _a : whole;
+  }));
+}
 function folderNameFor(name, mode) {
   const base = name.replace(/\s+(?:Dev|Submit)\s*$/, "");
   return `${base} ${mode === "submit" ? "Submit" : "Dev"}`;
@@ -2088,6 +2096,7 @@ var RenderExporter = class {
       parentDir: options.parentDir,
       folderName: folderNameFor(stem, options.mode),
       stem,
+      fileName: DEFAULT_FILE_NAME,
       overwrite: false,
       lineNumbers: options.lineNumbers,
       includeTags: options.includeTags,
@@ -2121,6 +2130,7 @@ var RenderExporter = class {
       return fail("tools", `Missing ${missing.join(", ")}. Render Doc needs pandoc, MacTeX (latexmk, lualatex, biber) and python3.`);
     }
     if (preamble2.trim() === "") return fail("preamble", `The ${plan.mode === "submit" ? "Submit" : "Dev"} preamble in Render Doc's settings is empty.`);
+    plan.stem = fileStemFor(plan.fileName, plan.meta, plan.file.basename);
     const target = this.check(plan);
     if (!target.ok) return fail("folder", target.message);
     if (target.exists && !plan.overwrite) {
@@ -2199,6 +2209,7 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.lineNumbersEl = null;
     this.summaryEl = null;
     this.tagsEl = null;
+    this.fileNameEl = null;
   }
   onOpen() {
     const { contentEl, plan } = this;
@@ -2206,6 +2217,15 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.titleEl.addClass("render-doc-title");
     this.showMode();
     contentEl.addClass("render-doc-modal");
+    const fileSetting = new import_obsidian2.Setting(contentEl).setName("File name").setDesc("").addText((text2) => {
+      text2.setValue(plan.fileName).onChange((v) => {
+        plan.fileName = v;
+        this.showFileName();
+      });
+      text2.inputEl.addClass("render-doc-path");
+    });
+    this.fileNameEl = fileSetting.descEl;
+    this.showFileName();
     new import_obsidian2.Setting(contentEl).setName("Version").setDesc("Dev: date/time stamp, page x of y bottom left. Submit: short title and author header, page x of y centred, no stamp, #tags and drawings left out.").addDropdown(
       (d) => d.addOption("dev", "Dev").addOption("submit", "Submit").setValue(plan.mode).onChange((v) => {
         var _a;
@@ -2304,6 +2324,13 @@ var RenderModal = class extends import_obsidian2.Modal {
     this.titleEl.toggleClass("is-submit", this.plan.mode === "submit");
     (_a = this.lineNumbersEl) == null ? void 0 : _a.toggle(lineNumbersAllowed(this.plan.mode));
     (_b = this.tagsEl) == null ? void 0 : _b.toggle(tagTableAllowed(this.plan.mode));
+  }
+  // The File name box's description: the variables, and the name it gives now.
+  showFileName() {
+    const el = this.fileNameEl;
+    if (!el) return;
+    const stem = fileStemFor(this.plan.fileName, this.plan.meta, this.plan.file.basename);
+    el.setText(`Names the PDF and .tex (not the folder). {titleshort}, {titleprint}, {title} and {basename} are filled in. Now: ${stem}.pdf`);
   }
   refresh() {
     var _a;

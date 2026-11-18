@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkExportTarget, folderNameFor, folderNameProblem, formatCoverDate, pandocMetadata, readDocMeta, safeStem } from '../src/core/document';
+import { checkExportTarget, DEFAULT_FILE_NAME, fileStemFor, folderNameFor, folderNameProblem, formatCoverDate, pandocMetadata, readDocMeta, safeStem } from '../src/core/document';
 import { extractBody, PAGE_BREAK_BLOCK } from '../src/core/exportBody';
 import { autociteCommand, citeHeader, latexEscape, metaHeader, unmatchedCommand } from '../src/core/latex';
 import type { ExportResolver } from '../src/core/obsidianMarkdown';
@@ -299,5 +299,28 @@ describe('prepareDocument + buildFiles', () => {
 		expect(plain.files['after.tex']).toBeUndefined();
 		expect(plain.files['cite.tex']).not.toContain('biblatex');
 		expect(plain.files['cite.tex']).toContain('\\rdunmatched');
+	});
+});
+
+describe('fileStemFor', () => {
+	const meta = readDocMeta({ title: 'Budget Entropy: A Study', titleprint: 'Budget Entropy', titleshort: 'BPEI' }, 'Final');
+
+	it('fills the default template with titleshort', () => {
+		expect(DEFAULT_FILE_NAME).toBe('Josh Glazer - {titleshort}');
+		expect(fileStemFor(DEFAULT_FILE_NAME, meta, 'Final')).toBe('Josh Glazer - BPEI');
+	});
+
+	it('falls back through titleprint and title to the basename', () => {
+		expect(fileStemFor('X - {titleshort}', readDocMeta({ titleprint: 'Short' }, 'Final'), 'Final')).toBe('X - Short');
+		expect(fileStemFor('X - {titleshort}', readDocMeta({}, 'Final'), 'Final')).toBe('X - Final');
+	});
+
+	it('fills the other variables, case-insensitively, and leaves unknown ones', () => {
+		expect(fileStemFor('{BASENAME} {titleprint} {other}', meta, 'Final')).toBe('Final Budget Entropy {other}');
+	});
+
+	it('makes the result safe: colons and slashes become dashes, empty becomes Document', () => {
+		expect(fileStemFor('{title}', meta, 'Final')).toBe('Budget Entropy- A Study');
+		expect(fileStemFor('  ', meta, 'Final')).toBe('Document');
 	});
 });

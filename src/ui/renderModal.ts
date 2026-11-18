@@ -11,6 +11,9 @@
 // always open off. A font-size dropdown that opens on the settings default
 // and changes only this render (Update002).
 //
+// At the top, a "File name" box (opens on "Josh Glazer - {titleshort}"): the
+// PDF and .tex are named from it when Render is clicked; the folder is not.
+//
 // The title sits in an alert box: yellow for Dev, red for Submit, so a
 // working draft is hard to mistake for the copy being handed in.
 
@@ -18,7 +21,7 @@ import type { App } from 'obsidian';
 import { Modal, Setting } from 'obsidian';
 
 import type { TargetCheck } from '../core/document';
-import { folderNameFor } from '../core/document';
+import { fileStemFor, folderNameFor } from '../core/document';
 import { PAGE_BREAK_SKIP_LINES } from '../core/exportBody';
 import type { RenderMode } from '../core/settings';
 import { FONT_SIZES, isFontSize, lineNumbersAllowed, tagTableAllowed } from '../core/settings';
@@ -39,6 +42,7 @@ export class RenderModal extends Modal {
 	private lineNumbersEl: HTMLElement | null = null;
 	private summaryEl: HTMLElement | null = null;
 	private tagsEl: HTMLElement | null = null;
+	private fileNameEl: HTMLElement | null = null;
 
 	constructor(
 		app: App,
@@ -54,6 +58,19 @@ export class RenderModal extends Modal {
 		this.titleEl.addClass('render-doc-title');
 		this.showMode();
 		contentEl.addClass('render-doc-modal');
+
+		const fileSetting = new Setting(contentEl)
+			.setName('File name')
+			.setDesc('')
+			.addText((text) => {
+				text.setValue(plan.fileName).onChange((v) => {
+					plan.fileName = v;
+					this.showFileName();
+				});
+				text.inputEl.addClass('render-doc-path');
+			});
+		this.fileNameEl = fileSetting.descEl;
+		this.showFileName();
 
 		new Setting(contentEl)
 			.setName('Version')
@@ -203,6 +220,14 @@ export class RenderModal extends Modal {
 		this.titleEl.toggleClass('is-submit', this.plan.mode === 'submit');
 		this.lineNumbersEl?.toggle(lineNumbersAllowed(this.plan.mode));
 		this.tagsEl?.toggle(tagTableAllowed(this.plan.mode));
+	}
+
+	// The File name box's description: the variables, and the name it gives now.
+	private showFileName(): void {
+		const el = this.fileNameEl;
+		if (!el) return;
+		const stem = fileStemFor(this.plan.fileName, this.plan.meta, this.plan.file.basename);
+		el.setText(`Names the PDF and .tex (not the folder). {titleshort}, {titleprint}, {title} and {basename} are filled in. Now: ${stem}.pdf`);
 	}
 
 	private refresh(): void {

@@ -105,6 +105,18 @@ export function safeStem(name: string): string {
 	return cleaned === '' ? 'Document' : cleaned;
 }
 
+// The dialog's "File name" box opens on this. {titleshort} etc. are filled in
+// when Render is clicked; only the PDF and .tex take the name, not the folder.
+export const DEFAULT_FILE_NAME = 'Josh Glazer - {titleshort}';
+
+// The PDF/.tex stem from the dialog's File name: {titleshort}, {titleprint},
+// {title} and {basename} are replaced (case-insensitive); any other {word} is
+// left as typed. The result goes through safeStem, so it is always usable.
+export function fileStemFor(template: string, meta: Pick<DocMeta, 'title' | 'printTitle' | 'shortTitle'>, basename: string): string {
+	const vars: Record<string, string> = { titleshort: meta.shortTitle, titleprint: meta.printTitle, title: meta.title, basename };
+	return safeStem(template.replace(/\{(\w+)\}/g, (whole, key: string) => vars[key.toLowerCase()] ?? whole));
+}
+
 // The export folder name for a version: "<name> Dev" or "<name> Submit". A
 // name already ending in either suffix has it swapped, so switching the
 // dialog's Version keeps any other edit to the name.

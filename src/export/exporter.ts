@@ -22,7 +22,7 @@ import { FileSystemAdapter } from 'obsidian';
 
 import { excalidrawAvailable, exportDrawingPng, zoteroManagerApi } from '../adapter/obsidianInternals';
 import type { DocMeta, TargetCheck } from '../core/document';
-import { checkExportTarget, folderNameFor, readDocMeta, safeStem } from '../core/document';
+import { checkExportTarget, DEFAULT_FILE_NAME, fileStemFor, folderNameFor, readDocMeta, safeStem } from '../core/document';
 import { DEFAULT_SIGIL_CHAR } from '../core/exportBody';
 import type { ExportResolver } from '../core/obsidianMarkdown';
 import type { PreparedDocument } from '../core/render';
@@ -48,7 +48,8 @@ export interface RenderPlan {
 	noteDir: string; // absolute
 	parentDir: string; // absolute; edited by the dialog
 	folderName: string; // edited by the dialog
-	stem: string;
+	stem: string; // set from fileName when Render is clicked
+	fileName: string; // edited by the dialog: the PDF/.tex name, {titleshort} etc. filled in at Render
 	// Set when Render is clicked while the dialog shows the "already exists"
 	// warning. Only then may delivery write into an existing folder.
 	overwrite: boolean;
@@ -153,6 +154,7 @@ export class RenderExporter {
 			parentDir: options.parentDir,
 			folderName: folderNameFor(stem, options.mode),
 			stem,
+			fileName: DEFAULT_FILE_NAME,
 			overwrite: false,
 			lineNumbers: options.lineNumbers,
 			includeTags: options.includeTags,
@@ -189,6 +191,7 @@ export class RenderExporter {
 		}
 		if (preamble.trim() === '') return fail('preamble', `The ${plan.mode === 'submit' ? 'Submit' : 'Dev'} preamble in Render Doc's settings is empty.`);
 
+		plan.stem = fileStemFor(plan.fileName, plan.meta, plan.file.basename);
 		const target = this.check(plan);
 		if (!target.ok) return fail('folder', target.message);
 		if (target.exists && !plan.overwrite) {
